@@ -8,7 +8,7 @@ description = "An CLI and API client for NAHPU scientific specimen cataloging ap
 readme = "README.md"
 homepage = "https://www.nahpu.app/"
 repository = "https://github.com/nahpu/nahpu_api"
-keywords = ["cli", "utility", "biology", "api"]
+keywords = ["cli", "utility", "biology", "api", "nahpu"]
 categories = ["command-line-utilities", "science"]
 
 
