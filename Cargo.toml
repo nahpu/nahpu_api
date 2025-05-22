@@ -2,6 +2,15 @@
 name = "nahpu_api"
 version = "0.1.0"
 edition = "2021"
+authors = ["Heru Handika <herubiolog@gmail.com>"]
+license = "MIT"
+description = "An CLI and API client for NAHPU scientific specimen cataloging application."
+readme = "README.md"
+homepage = "https://www.nahpu.app/"
+repository = "https://github.com/nahpu/nahpu_api"
+keywords = ["cli", "utility", "biology", "api"]
+categories = ["command-line-utilities", "science"]
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
