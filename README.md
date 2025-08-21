@@ -18,5 +18,5 @@ Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) fil
 
 This project is built with Rust and uses the following main dependencies:
 
-*   [flate2](https://crates.io/crates/flate2)
-*   [zip](https://crates.io/crates/zip)
+* [flate2](https://crates.io/crates/flate2)
+* [zip](https://crates.io/crates/zip)
