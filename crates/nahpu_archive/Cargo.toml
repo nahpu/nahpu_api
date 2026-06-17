@@ -3,14 +3,13 @@ name = "nahpu_archive"
 version = "0.1.0"
 edition = "2024"
 authors = ["Heru Handika <herubiolog@gmail.com>"]
+description = "A utility crate for archiving and extracting Nahpu project data."
+repository = "https://github.com/hhandika/nahpu_api"
 license = "MIT"
-description = "An CLI and API client for NAHPU scientific specimen cataloging application."
+keywords = ["nahpu", "archive", "zip"]
+categories = ["compression"]
 readme = "README.md"
 homepage = "https://www.nahpu.app/"
-repository = "https://github.com/nahpu/nahpu_api"
-keywords = ["cli", "utility", "biology", "api", "nahpu"]
-categories = ["command-line-utilities", "science"]
-
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
