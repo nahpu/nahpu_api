@@ -1,24 +1,36 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+pub mod types;
+pub mod dwc;
+pub mod export;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::{Serialize, Deserialize};
+    use serde_json::json;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    #[derive(Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct DummyProject {
+        uuid: String,
+        name: String,
+        unmapped_field: Option<String>,
+        null_field: Option<String>,
     }
 
     #[test]
-    fn add_zeros() {
-        assert_eq!(add(0, 0), 0);
-    }
+    fn test_json_conversion() {
+        let project = DummyProject {
+            uuid: "1234-5678".to_string(),
+            name: "My Project".to_string(),
+            unmapped_field: Some("Data".to_string()),
+            null_field: None,
+        };
 
-    #[test]
-    fn add_large_numbers() {
-        assert_eq!(add(1000000, 2000000), 3000000);
+        let result = export::json::convert_to_dwc_json("project", &project).unwrap();
+
+        assert_eq!(result["dcterms:identifier"], json!("1234-5678"));
+        assert_eq!(result["dwc:datasetName"], json!("My Project"));
+        assert_eq!(result["unmappedField"], json!("Data")); // Falls back to original camelCase name
+        assert!(result.get("nullField").is_none()); // Nulls are excluded
     }
 }
