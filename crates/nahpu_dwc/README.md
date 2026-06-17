@@ -66,6 +66,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Simple Darwin Core XML Export
+
+To natively export an array of structs into the flat XML format compliant with the [Simple Darwin Core specification](https://dwc.tdwg.org/xml/), you can use `export_to_dwc_xml`:
+
+```rust
+use nahpu_dwc::export::xml::export_to_dwc_xml;
+use serde::Serialize;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DummySite {
+    site_id: String,
+    country: String,
+}
+
+fn main() {
+    let sites = vec![
+        DummySite { site_id: "S1".to_string(), country: "USA".to_string() }
+    ];
+
+    let xml = export_to_dwc_xml("site", &sites).unwrap();
+    println!("{}", xml);
+}
+```
+
 ## Nahpu to Darwin Core Mappings
 
 The following table summarizes how Nahpu database fields map to official Darwin Core terms.
