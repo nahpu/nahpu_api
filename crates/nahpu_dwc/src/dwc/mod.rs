@@ -25,7 +25,7 @@ impl DwcMapper {
 
     fn map_site_column(column_name: &str) -> Option<&'static str> {
         match column_name {
-            "siteID" => Some("dwc:locationID"),
+            "siteId" => Some("dwc:locationID"),
             "projectUuid" => Some("dwc:datasetID"),
             "leadStaffId" => Some("dwc:recordedBy"),
             "country" => Some("dwc:country"),
@@ -34,7 +34,7 @@ impl DwcMapper {
             "municipality" => Some("dwc:municipality"),
             "locality" => Some("dwc:verbatimLocality"),
             "remark" => Some("dwc:locationRemarks"),
-            "habitatType" | "habitatDescription" => Some("dwc:habitat"),
+            "habitatType" | "habitatCondition" | "habitatDescription" => Some("dwc:habitat"),
             _ => None,
         }
     }
@@ -46,7 +46,7 @@ impl DwcMapper {
             "elevationInMeter" => Some("dwc:minimumElevationInMeters"),
             "datum" => Some("dwc:geodeticDatum"),
             "uncertaintyInMeters" => Some("dwc:coordinateUncertaintyInMeters"),
-            "notes" => Some("dwc:georeferenceRemarks"),
+            "gpsUnit" | "notes" => Some("dwc:georeferenceRemarks"),
             _ => None,
         }
     }
@@ -64,14 +64,15 @@ impl DwcMapper {
 
     fn map_coll_personnel_column(column_name: &str) -> Option<&'static str> {
         match column_name {
-            "personnelId" | "name" => Some("dwc:recordedBy"),
+            "personnelId" => Some("dwc:recordedByID"),
+            "name" => Some("dwc:recordedBy"),
             _ => None,
         }
     }
 
     fn map_coll_effort_column(column_name: &str) -> Option<&'static str> {
         match column_name {
-            "method" => Some("dwc:samplingProtocol"),
+            "method" | "brand" => Some("dwc:samplingProtocol"),
             "count" | "size" => Some("dwc:sampleSizeValue"),
             "notes" => Some("dwc:samplingEffort"),
             _ => None,
@@ -109,6 +110,7 @@ impl DwcMapper {
 
     fn map_personnel_column(column_name: &str) -> Option<&'static str> {
         match column_name {
+            "uuid" => Some("dcterms:identifier"),
             "name" => Some("dwc:recordedBy"),
             "affiliation" => Some("dwc:institutionCode"),
             _ => None,
@@ -125,7 +127,7 @@ impl DwcMapper {
             "authors" => Some("dwc:scientificNameAuthorship"),
             "commonName" => Some("dwc:vernacularName"),
             "notes" => Some("dwc:taxonRemarks"),
-            "redListCategory" => Some("dwc:threatStatus"),
+            "citesStatus" | "redListCategory" => Some("dwc:threatStatus"),
             _ => None,
         }
     }
@@ -133,26 +135,28 @@ impl DwcMapper {
     fn map_specimen_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "uuid" => Some("dwc:occurrenceID"),
-            "speciesID" => Some("dwc:taxonID"),
+            "projectUuid" => Some("dwc:datasetID"),
+            "speciesId" => Some("dwc:taxonID"),
             "iDConfidence" => Some("dwc:identificationQualifier"),
             "iDMethod" => Some("dwc:identificationRemarks"),
+            "taxonGroup" => Some("dwc:higherClassification"),
             "condition" => Some("dwc:disposition"),
             "prepDate" => Some("dcterms:modified"),
-            "collectionTime" => Some("dwc:eventTime"),
-            "captureDate" => Some("dwc:eventDate"),
+            "collectionDate" | "captureDate" => Some("dwc:eventDate"),
+            "collectionTime" | "captureTime" => Some("dwc:eventTime"),
             "trapType" => Some("dwc:samplingProtocol"),
-            "catalogerID" => Some("dwc:recordedBy"),
+            "catalogerId" => Some("dwc:recordedBy"),
             "fieldNumber" => Some("dwc:recordNumber"),
-            "collEventID" => Some("dwc:eventID"),
-            "museumID" => Some("dwc:institutionCode"),
-            "preparatorID" => Some("dwc:preparations"),
+            "collEventId" => Some("dwc:eventID"),
+            "museumId" => Some("dwc:institutionCode"),
+            "preparatorId" => Some("dwc:preparations"),
             _ => None,
         }
     }
 
     fn map_specimen_part_column(column_name: &str) -> Option<&'static str> {
         match column_name {
-            "barcodeID" => Some("dwc:otherCatalogNumbers"),
+            "barcodeId" => Some("dwc:otherCatalogNumbers"),
             "type" | "treatment" => Some("dwc:preparations"),
             "count" => Some("dwc:individualCount"),
             "museumPermanent" | "museumLoan" => Some("dwc:disposition"),

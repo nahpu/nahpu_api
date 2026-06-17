@@ -5,7 +5,6 @@ use serde_json::json;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DummySite {
-    #[serde(rename = "siteID")]
     site_id: String,
     country: String,
 }
