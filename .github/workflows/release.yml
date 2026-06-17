@@ -1,0 +1,26 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish nahpu_dwc
+        run: cargo publish --token ${{ secrets.CRATE_IO_NAHPU_API }} -p nahpu_dwc
+
+      - name: Publish nahpu_archive
+        run: cargo publish --token ${{ secrets.CRATE_IO_NAHPU_API }} -p nahpu_archive
