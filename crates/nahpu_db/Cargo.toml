@@ -1,0 +1,15 @@
+[package]
+name = "nahpu_db"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+
+[build-dependencies]
+heck = "0.5.0"
+reqwest = { version = "0.13.4", features = ["blocking"] }
+sqlparser = "0.62.0"
+
+[dev-dependencies]
+serde_json = "1.0.150"

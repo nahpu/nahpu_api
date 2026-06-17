@@ -1,19 +1,19 @@
 //! # NAHPU Darwin Core (DwC) Converter
 //!
-//! `nahpu_dwc` provides data structures and conversion utilities to map NAHPU 
+//! `nahpu_dwc` provides data structures and conversion utilities to map NAHPU
 //! data types to Darwin Core (DwC) standards.
 //!
 //! It auto-generates Rust structs from the NAHPU SQLite drift schema and
 //! implements logic to serialize NAHPU records into Darwin Core compliant formats.
 
-pub mod types;
 pub mod dwc;
 pub mod export;
+pub mod types;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
     use serde_json::json;
 
     #[derive(Serialize, Deserialize)]

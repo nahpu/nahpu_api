@@ -136,10 +136,10 @@ mod tests {
         ];
 
         let mut builder = DataPackageBuilder::new("nahpu_test_dp");
-        
+
         // Add resource
         builder.add_resource("site", &sites, output_dir).unwrap();
-        
+
         // Build datapackage.json
         builder.build(output_dir).unwrap();
 
@@ -164,12 +164,12 @@ mod tests {
         assert_eq!(dp_json["name"], "nahpu_test_dp");
         assert_eq!(dp_json["resources"][0]["name"], "site");
         assert_eq!(dp_json["resources"][0]["path"], "site.csv");
-        
-        let fields = dp_json["resources"][0]["schema"]["fields"].as_array().unwrap();
-        let field_names: Vec<&str> = fields.iter()
-            .map(|f| f["name"].as_str().unwrap())
-            .collect();
-        
+
+        let fields = dp_json["resources"][0]["schema"]["fields"]
+            .as_array()
+            .unwrap();
+        let field_names: Vec<&str> = fields.iter().map(|f| f["name"].as_str().unwrap()).collect();
+
         assert!(field_names.contains(&"dwc:locationID"));
         assert!(field_names.contains(&"dwc:country"));
     }

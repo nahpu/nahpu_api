@@ -186,9 +186,9 @@ mod tests {
 
         let file = Path::new("/base/dir/sub/file.txt");
         let parsed = zip_archive.parse_file_path(file);
-        
-        // Strip prefix on windows could result in backslashes, but `to_str()` just uses what's there. 
-        // For Zip paths, they should be consistent, but since `parse_file_path` just uses `to_str`, 
+
+        // Strip prefix on windows could result in backslashes, but `to_str()` just uses what's there.
+        // For Zip paths, they should be consistent, but since `parse_file_path` just uses `to_str`,
         // it might return OS specific paths. Let's test standard stripping.
         assert_eq!(parsed, Path::new("sub/file.txt").to_str().unwrap());
     }
@@ -203,7 +203,7 @@ mod tests {
 
         let file = Path::new("/alt/dir/sub/file.txt");
         let parsed = zip_archive.parse_file_path(file);
-        
+
         assert_eq!(parsed, Path::new("sub/file.txt").to_str().unwrap());
     }
 
@@ -216,7 +216,7 @@ mod tests {
 
         let file = Path::new("/completely/different/sub/file.txt");
         let parsed = zip_archive.parse_file_path(file);
-        
+
         assert_eq!(parsed, "file.txt");
     }
 }

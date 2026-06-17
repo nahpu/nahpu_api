@@ -17,11 +17,7 @@ quick-xml = "0.36.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 zip = "8.6.0"
-
-[build-dependencies]
-heck = "0.5.0"
-reqwest = { version = "0.13.4", features = ["blocking"] }
-sqlparser = "0.62.0"
+nahpu_db = { path = "../nahpu_db" }
 
 [dev-dependencies]
 tempfile = "3.10.0"

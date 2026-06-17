@@ -15,14 +15,13 @@ use reqwest::blocking::get;
 use sqlparser::ast::{ColumnOption, DataType, Statement};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
 const NAHPU_TABLES_URL: &str =
     "https://raw.githubusercontent.com/nahpu/nahpu/main/lib/services/database/tables.drift";
 
-const OUT_DIR: &str = "src/types/";
 const GENERATED_FILE: &str = "nahpu_sqlite.rs";
 
 /// Maps SQL data types from the .drift file to corresponding Rust types.
@@ -91,17 +90,11 @@ fn clean_drift_content(content: &str) -> String {
         .collect()
 }
 
+use std::env;
+
 fn write_rust_file(content: &str) {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    println!("Detected manifest dir: {}", manifest_dir);
-    // Error handling for directory creation and file writing.
-    if manifest_dir.is_empty() {
-        panic!("CARGO_MANIFEST_DIR environment variable is not set.");
-    }
-    let dest_path = Path::new(&manifest_dir).join(OUT_DIR).join(GENERATED_FILE);
-    if let Some(parent) = dest_path.parent() {
-        fs::create_dir_all(parent).expect("Unable to create directory");
-    }
+    let out_dir = env::var("OUT_DIR").expect("OUT_DIR environment variable is not set");
+    let dest_path = Path::new(&out_dir).join(GENERATED_FILE);
     let file = File::create(&dest_path).expect("Unable to create file");
     let mut writer = BufWriter::new(file);
     // Write auto-generated indicator and source link at the top of the file.
@@ -178,7 +171,10 @@ fn main() {
     let drift_content = match get(drift_file_url) {
         Ok(response) => response.text().expect("Failed to read response text"),
         Err(e) => {
-            println!("cargo:warning=Failed to fetch drift file: {}. Skipping generation.", e);
+            println!(
+                "cargo:warning=Failed to fetch drift file: {}. Skipping generation.",
+                e
+            );
             return;
         }
     };
