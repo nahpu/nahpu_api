@@ -29,6 +29,43 @@ fn main() {
 }
 ```
 
+### Darwin Core Data Package (DwC-DP) Export
+
+You can seamlessly export entire collections of structs into a standard Darwin Core Data Package (which conforms to the Frictionless Data Package specification) by using `DataPackageBuilder`.
+
+```rust
+use nahpu_dwc::export::dp::DataPackageBuilder;
+use serde::Serialize;
+use std::path::Path;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DummySite {
+    site_id: String,
+    country: String,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let sites = vec![
+        DummySite { site_id: "S1".to_string(), country: "USA".to_string() },
+        DummySite { site_id: "S2".to_string(), country: "Canada".to_string() },
+    ];
+
+    let output_dir = Path::new("./export_output");
+    std::fs::create_dir_all(&output_dir)?;
+
+    let mut builder = DataPackageBuilder::new("nahpu_dp");
+    
+    // Serializes the structs into `site.csv` and auto-generates DwC headers
+    builder.add_resource("site", &sites, &output_dir)?;
+    
+    // Emits the frictioneless `datapackage.json` connecting the resources
+    builder.build(&output_dir)?;
+    
+    Ok(())
+}
+```
+
 ## Nahpu to Darwin Core Mappings
 
 The following table summarizes how Nahpu database fields map to official Darwin Core terms.
