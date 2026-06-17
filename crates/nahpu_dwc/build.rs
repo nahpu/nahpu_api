@@ -175,10 +175,13 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs"); // Re-run if build script itself changes.
     println!("Fetching drift file from: {}", drift_file_url);
     // Fetch the drift file content from the URL.
-    let drift_content = get(drift_file_url)
-        .expect("Failed to fetch drift file from URL")
-        .text()
-        .expect("Failed to read response text");
+    let drift_content = match get(drift_file_url) {
+        Ok(response) => response.text().expect("Failed to read response text"),
+        Err(e) => {
+            println!("cargo:warning=Failed to fetch drift file: {}. Skipping generation.", e);
+            return;
+        }
+    };
 
     let cleaned_content = clean_drift_content(&drift_content);
     // Close the 'models' module.
