@@ -6,6 +6,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use zip::write::FileOptions;
+
 pub struct ZipArchive<'a> {
     /// The parent directory of the files to be archived.
     /// This is used to create the directory structure in the archive.
@@ -43,8 +45,8 @@ impl<'a> ZipArchive<'a> {
 
     pub fn write(&self) -> Result<(), std::io::Error> {
         let mut zip = zip::ZipWriter::new(std::fs::File::create(self.output_path).unwrap());
-        let options =
-            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let options: FileOptions<()> =
+            FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
         for file in self.files {
             let file_path = self.parse_file_path(file);

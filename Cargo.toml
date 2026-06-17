@@ -1,19 +1,4 @@
-[package]
-name = "nahpu_api"
-version = "0.1.0"
-edition = "2021"
-authors = ["Heru Handika <herubiolog@gmail.com>"]
-license = "MIT"
-description = "An CLI and API client for NAHPU scientific specimen cataloging application."
-readme = "README.md"
-homepage = "https://www.nahpu.app/"
-repository = "https://github.com/nahpu/nahpu_api"
-keywords = ["cli", "utility", "biology", "api", "nahpu"]
-categories = ["command-line-utilities", "science"]
+[workspace]
+resolver = "3"
+members = ["crates/nahpu-dwc","crates/nahpu_archive"]
 
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-flate2 = "1.0.34"
-zip = "0.*"
