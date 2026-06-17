@@ -8,7 +8,34 @@
 pub struct DwcMapper;
 
 impl DwcMapper {
-    // --- Private mapping functions for each table ---
+    // --- Public entry point ---
+    /// Maps a table and column name from the Nahpu schema to the corresponding Darwin Core term.
+    pub fn get_dwc_term(table_name: &str, column_name: &str) -> Option<&'static str> {
+        match table_name {
+            "project" => Self::map_project_column(column_name),
+            "site" => Self::map_site_column(column_name),
+            "coordinate" => Self::map_coordinate_column(column_name),
+            "collEvent" => Self::map_coll_event_column(column_name),
+            "collPersonnel" => Self::map_coll_personnel_column(column_name),
+            "collEffort" => Self::map_coll_effort_column(column_name),
+            "narrative" => Self::map_narrative_column(column_name),
+            "media" => Self::map_media_column(column_name),
+            "associatedData" => Self::map_associated_data_column(column_name),
+            "personnel" => Self::map_personnel_column(column_name),
+            "taxonomy" => Self::map_taxonomy_column(column_name),
+            "specimen" => Self::map_specimen_column(column_name),
+            "specimenPart" => Self::map_specimen_part_column(column_name),
+            "narrativeMedia" => Self::map_narrative_media_column(column_name),
+            "siteMedia" => Self::map_site_media_column(column_name),
+            "specimenMedia" => Self::map_specimen_media_column(column_name),
+            "personnelList" => Self::map_personnel_list_column(column_name),
+            "weather" => Self::map_weather_column(column_name),
+            "mammalMeasurement" => Self::map_mammal_measurement_column(column_name),
+            "avianMeasurement" => Self::map_avian_measurement_column(column_name),
+            _ => None,
+        }
+    }
+
     fn map_project_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "uuid" => Some("dcterms:identifier"),
@@ -246,42 +273,4 @@ impl DwcMapper {
             _ => None,
         }
     }
-
-    // --- Public entry point ---
-    /// Maps a table and column name from the Nahpu schema to the corresponding Darwin Core term.
-    pub fn get_dwc_term(table_name: &str, column_name: &str) -> Option<&'static str> {
-        match table_name {
-            "project" => Self::map_project_column(column_name),
-            "site" => Self::map_site_column(column_name),
-            "coordinate" => Self::map_coordinate_column(column_name),
-            "collEvent" => Self::map_coll_event_column(column_name),
-            "collPersonnel" => Self::map_coll_personnel_column(column_name),
-            "collEffort" => Self::map_coll_effort_column(column_name),
-            "narrative" => Self::map_narrative_column(column_name),
-            "media" => Self::map_media_column(column_name),
-            "associatedData" => Self::map_associated_data_column(column_name),
-            "personnel" => Self::map_personnel_column(column_name),
-            "taxonomy" => Self::map_taxonomy_column(column_name),
-            "specimen" => Self::map_specimen_column(column_name),
-            "specimenPart" => Self::map_specimen_part_column(column_name),
-            "narrativeMedia" => Self::map_narrative_media_column(column_name),
-            "siteMedia" => Self::map_site_media_column(column_name),
-            "specimenMedia" => Self::map_specimen_media_column(column_name),
-            "personnelList" => Self::map_personnel_list_column(column_name),
-            "weather" => Self::map_weather_column(column_name),
-            "mammalMeasurement" => Self::map_mammal_measurement_column(column_name),
-            "avianMeasurement" => Self::map_avian_measurement_column(column_name),
-            _ => None,
-        }
-    }
 }
-
-/*
-NOTE on Measurement Tables (`mammalMeasurement`, `avianMeasurement`, `weather`):
-These tables are best represented using the Darwin Core MeasurementOrFact extension.
-Each column (e.g., `totalLength`, `weight`, `lowestDayTempC`) maps to a `dwc:measurementValue`,
-and requires corresponding `dwc:measurementType` (e.g., "totalLength", "mass", "temperature")
-and `dwc:measurementUnit` (e.g., "mm", "g", "Celsius") terms.
-Direct mapping in this function is not suitable for these extension-based tables.
-The `dwc:sex`, `dwc:lifeStage`, and `dwc:reproductiveCondition` terms should be used for relevant columns.
-*/
