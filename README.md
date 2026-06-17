@@ -1,5 +1,7 @@
 # NAHPU API
 
+![nahpu-test](https://github.com/nahpu/nahpu_api/actions/workflows/test.yml/badge.svg)
+
 A cross-platform Application Programming Interface (API) for the NAHPU specimen cataloging app (work in progress). It handles heavy computation for the app and provides a unified interface for the planned NAHPU suites of command line tools and Python and R libraries.
 
 ## Installation
