@@ -11,4 +11,14 @@ mod tests {
         let result = add(2, 2);
         assert_eq!(result, 4);
     }
+
+    #[test]
+    fn add_zeros() {
+        assert_eq!(add(0, 0), 0);
+    }
+
+    #[test]
+    fn add_large_numbers() {
+        assert_eq!(add(1000000, 2000000), 3000000);
+    }
 }

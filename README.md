@@ -10,13 +10,11 @@ A cross-platform Application Programming Interface (API) for the NAHPU specimen 
 cargo install nahpu_api
 ```
 
+## Development Guidelines
+
+### Crate Naming Style
+When creating new crates in this workspace, please use `snake_case` for crate names and their corresponding directories (e.g., `nahpu_dwc`).
+
 ## Contributing
 
 Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) file for details on how to contribute to this project.
-
-## Technologies
-
-This project is built with Rust and uses the following main dependencies:
-
-* [flate2](https://crates.io/crates/flate2)
-* [zip](https://crates.io/crates/zip)
