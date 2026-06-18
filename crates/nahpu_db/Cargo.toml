@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+calamine = { version = "0.35.0", features = ["dates"] }
+polars = { version = "0.54.4", features = ["csv", "json", "lazy", "strings"] }
+rust_xlsxwriter = { version = "0.95.0", features = ["serde"] }
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
 
 [build-dependencies]
 heck = "0.5.0"
