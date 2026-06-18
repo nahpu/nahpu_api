@@ -25,52 +25,21 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATE_IO_NAHPU_API }}
         run: |
-          UNPUBLISHED=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.publish != []) | .name')
-          MAX_RETRIES=10
-          ATTEMPT=0
+          CRATES=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.publish != []) | .name')
 
-          while [ -n "$UNPUBLISHED" ]; do
-            ATTEMPT=$((ATTEMPT + 1))
-            if [ "$ATTEMPT" -gt "$MAX_RETRIES" ]; then
-              echo "Error: Exceeded $MAX_RETRIES retry attempts. Remaining crates: $UNPUBLISHED"
+          for crate in $CRATES; do
+            echo "Publishing $crate..."
+            EXIT_CODE=0
+            OUTPUT=$(cargo publish -p "$crate" 2>&1) || EXIT_CODE=$?
+            echo "$OUTPUT"
+
+            if [ "$EXIT_CODE" -eq 0 ]; then
+              echo "Successfully published $crate."
+              sleep 5
+            elif echo "$OUTPUT" | grep -q "already exists"; then
+              echo "Crate $crate is already published. Skipping."
+            else
+              echo "Error: Failed to publish $crate."
               exit 1
-            fi
-
-            echo "=== Publish attempt $ATTEMPT ==="
-            PROGRESS=0
-            REMAINING=""
-
-            for crate in $UNPUBLISHED; do
-              echo "Attempting to publish $crate..."
-              EXIT_CODE=0
-              OUTPUT=$(cargo publish -p "$crate" 2>&1) || EXIT_CODE=$?
-              echo "$OUTPUT"
-
-              if [ "$EXIT_CODE" -eq 0 ]; then
-                echo "Successfully published $crate."
-                PROGRESS=1
-                sleep 5
-              elif echo "$OUTPUT" | grep -q "is already uploaded"; then
-                echo "Crate $crate is already published. Skipping."
-                PROGRESS=1
-              else
-                echo "Failed to publish $crate. Will retry in next iteration."
-                REMAINING="$REMAINING $crate"
-              fi
-            done
-
-            UNPUBLISHED=$(echo "$REMAINING" | xargs)
-
-            if [ -n "$UNPUBLISHED" ] && [ "$PROGRESS" -eq 0 ]; then
-              echo "Error: No progress made. Remaining crates: $UNPUBLISHED"
-              FIRST_CRATE="${UNPUBLISHED%% *}"
-              echo "Showing full error for $FIRST_CRATE:"
-              cargo publish -p "$FIRST_CRATE"
-              exit 1
-            fi
-
-            if [ -n "$UNPUBLISHED" ]; then
-              echo "Waiting before next retry..."
-              sleep 10
             fi
           done
