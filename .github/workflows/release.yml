@@ -22,7 +22,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Publish nahpu_dwc
-        run: cargo publish --token ${{ secrets.CRATE_IO_NAHPU_API }} -p nahpu_dwc
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATE_IO_NAHPU_API }}
+        run: cargo publish -p nahpu_dwc
 
       - name: Publish nahpu_archive
-        run: cargo publish --token ${{ secrets.CRATE_IO_NAHPU_API }} -p nahpu_archive
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATE_IO_NAHPU_API }}
+        run: cargo publish -p nahpu_archive
