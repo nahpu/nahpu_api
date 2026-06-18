@@ -1,32 +1,62 @@
 use calamine::{DataType, Reader, Xlsx, open_workbook};
-use polars::prelude::{CsvParseOptions, CsvReadOptions, DataFrame, JsonReader, SerReader};
+use serde_json::Value;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-/// Import a CSV into a DataFrame.
-pub fn import_csv(path: &Path) -> Result<DataFrame, String> {
-    let file = File::open(path).map_err(|e| e.to_string())?;
-    CsvReadOptions::default()
-        .with_has_header(true)
-        .into_reader_with_file_handle(file)
-        .finish()
-        .map_err(|e| e.to_string())
+/// Import a CSV into a JSON array.
+pub fn import_csv(path: &Path) -> Result<Vec<Value>, String> {
+    import_delimited(path, b',')
 }
 
-/// Import a TSV into a DataFrame.
-pub fn import_tsv(path: &Path) -> Result<DataFrame, String> {
-    let file = File::open(path).map_err(|e| e.to_string())?;
-    CsvReadOptions::default()
-        .with_has_header(true)
-        .with_parse_options(CsvParseOptions::default().with_separator(b'\t'))
-        .into_reader_with_file_handle(file)
-        .finish()
-        .map_err(|e| e.to_string())
+/// Import a TSV into a JSON array.
+pub fn import_tsv(path: &Path) -> Result<Vec<Value>, String> {
+    import_delimited(path, b'\t')
 }
 
-/// Import an Excel (.xlsx) file into a DataFrame using Calamine and Serde JSON.
-pub fn import_excel(path: &Path, sheet_name: &str) -> Result<DataFrame, String> {
+fn import_delimited(path: &Path, delimiter: u8) -> Result<Vec<Value>, String> {
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .delimiter(delimiter)
+        .from_path(path)
+        .map_err(|e| e.to_string())?;
+
+    let mut json_array = Vec::new();
+    let headers = rdr.headers().map_err(|e| e.to_string())?.clone();
+
+    for result in rdr.records() {
+        let record = result.map_err(|e| e.to_string())?;
+        let mut map = serde_json::Map::new();
+        for (i, val) in record.iter().enumerate() {
+            if i >= headers.len() {
+                break;
+            }
+            let key = headers[i].to_string();
+            // Store as string or try to parse
+            let value = if val.is_empty() {
+                Value::Null
+            } else if let Ok(n) = val.parse::<i64>() {
+                Value::Number(n.into())
+            } else if let Ok(f) = val.parse::<f64>() {
+                if let Some(num) = serde_json::Number::from_f64(f) {
+                    Value::Number(num)
+                } else {
+                    Value::String(val.to_string())
+                }
+            } else if let Ok(b) = val.parse::<bool>() {
+                Value::Bool(b)
+            } else {
+                Value::String(val.to_string())
+            };
+            map.insert(key, value);
+        }
+        json_array.push(Value::Object(map));
+    }
+    Ok(json_array)
+}
+
+/// Import an Excel (.xlsx) file into a JSON array.
+pub fn import_excel(path: &Path, sheet_name: &str) -> Result<Vec<Value>, String> {
     let mut workbook: Xlsx<BufReader<File>> =
         open_workbook(path).map_err(|e: calamine::XlsxError| e.to_string())?;
     let range = workbook
@@ -48,39 +78,37 @@ pub fn import_excel(path: &Path, sheet_name: &str) -> Result<DataFrame, String> 
             }
             let key = headers[i].clone();
             let val = match cell {
-                calamine::Data::Empty => serde_json::Value::Null,
-                calamine::Data::String(s) => serde_json::Value::String(s.clone()),
+                calamine::Data::Empty => Value::Null,
+                calamine::Data::String(s) => Value::String(s.clone()),
                 calamine::Data::Float(f) => {
                     if f.fract() == 0.0 {
-                        serde_json::Value::Number(serde_json::Number::from(*f as i64))
+                        Value::Number(serde_json::Number::from(*f as i64))
                     } else {
                         serde_json::Number::from_f64(*f)
-                            .map(serde_json::Value::Number)
-                            .unwrap_or(serde_json::Value::Null)
+                            .map(Value::Number)
+                            .unwrap_or(Value::Null)
                     }
                 }
-                calamine::Data::Int(i) => serde_json::Value::Number(serde_json::Number::from(*i)),
-                calamine::Data::Bool(b) => serde_json::Value::Bool(*b),
-                calamine::Data::Error(e) => serde_json::Value::String(e.to_string()),
+                calamine::Data::Int(i) => Value::Number(serde_json::Number::from(*i)),
+                calamine::Data::Bool(b) => Value::Bool(*b),
+                calamine::Data::Error(e) => Value::String(e.to_string()),
                 calamine::Data::DateTime(_) => {
                     if let Some(dt) = cell.as_datetime() {
-                        serde_json::Value::String(dt.to_string())
+                        Value::String(dt.to_string())
                     } else if let Some(s) = cell.as_string() {
-                        serde_json::Value::String(s)
+                        Value::String(s)
                     } else {
-                        serde_json::Value::Null
+                        Value::Null
                     }
                 }
                 calamine::Data::DateTimeIso(s) | calamine::Data::DurationIso(s) => {
-                    serde_json::Value::String(s.clone())
+                    Value::String(s.clone())
                 }
             };
             map.insert(key, val);
         }
-        json_array.push(serde_json::Value::Object(map));
+        json_array.push(Value::Object(map));
     }
 
-    let json_bytes = serde_json::to_vec(&json_array).map_err(|e| e.to_string())?;
-    let cursor = std::io::Cursor::new(json_bytes);
-    JsonReader::new(cursor).finish().map_err(|e| e.to_string())
+    Ok(json_array)
 }

@@ -1,29 +1,29 @@
 pub mod export;
 pub mod import;
 
-use polars::prelude::{DataFrame, SerReader, SerWriter};
 use serde::{Serialize, de::DeserializeOwned};
+use serde_json::Value;
 
 pub trait NahpuExport {
-    /// Convert the collection to a Polars DataFrame.
-    fn to_dataframe(&self) -> Result<DataFrame, String>;
+    /// Convert the collection to a JSON array.
+    fn to_json_array(&self) -> Result<Vec<Value>, String>;
 }
 
 pub trait NahpuImport: Sized {
-    /// Create a collection from a Polars DataFrame.
-    fn from_dataframe(df: &mut DataFrame) -> Result<Vec<Self>, String>;
+    /// Create a collection from a JSON array.
+    fn from_json_array(data: &[Value]) -> Result<Vec<Self>, String>;
 }
 
 impl<T> NahpuExport for [T]
 where
     T: Serialize,
 {
-    fn to_dataframe(&self) -> Result<DataFrame, String> {
-        let json_bytes = serde_json::to_vec(self).map_err(|e| e.to_string())?;
-        let cursor = std::io::Cursor::new(json_bytes);
-        polars::prelude::JsonReader::new(cursor)
-            .finish()
-            .map_err(|e| e.to_string())
+    fn to_json_array(&self) -> Result<Vec<Value>, String> {
+        let json_value = serde_json::to_value(self).map_err(|e| e.to_string())?;
+        match json_value {
+            Value::Array(arr) => Ok(arr),
+            _ => Err("Expected array format".to_string()),
+        }
     }
 }
 
@@ -31,8 +31,8 @@ impl<T> NahpuExport for Vec<T>
 where
     T: Serialize,
 {
-    fn to_dataframe(&self) -> Result<DataFrame, String> {
-        self.as_slice().to_dataframe()
+    fn to_json_array(&self) -> Result<Vec<Value>, String> {
+        self.as_slice().to_json_array()
     }
 }
 
@@ -40,13 +40,9 @@ impl<T> NahpuImport for T
 where
     T: DeserializeOwned,
 {
-    fn from_dataframe(df: &mut DataFrame) -> Result<Vec<Self>, String> {
-        let mut buf = Vec::new();
-        polars::prelude::JsonWriter::new(&mut buf)
-            .with_json_format(polars::prelude::JsonFormat::Json)
-            .finish(df)
-            .map_err(|e| e.to_string())?;
-        serde_json::from_slice(&buf).map_err(|e| e.to_string())
+    fn from_json_array(data: &[Value]) -> Result<Vec<Self>, String> {
+        let json_value = Value::Array(data.to_vec());
+        serde_json::from_value(json_value).map_err(|e| e.to_string())
     }
 }
 
@@ -99,13 +95,16 @@ mod tests {
     #[test]
     fn test_csv_export_import() {
         let sites = get_dummy_sites();
-        let mut df = sites.to_dataframe().unwrap();
+        let data = sites.to_json_array().unwrap();
+        // Just extract a couple headers for test
+        let cols: Vec<String> = data[0].as_object().unwrap().keys().cloned().collect();
 
         let path = PathBuf::from("test_export.csv");
-        super::export::export_csv(&mut df, &path).unwrap();
+        let exporter = super::export::RecordExporter::new(&data, &cols);
+        exporter.export_csv(&path).unwrap();
 
-        let mut imported_df = super::import::import_csv(&path).unwrap();
-        let imported_sites: Vec<Site> = Site::from_dataframe(&mut imported_df).unwrap();
+        let imported_data = super::import::import_csv(&path).unwrap();
+        let imported_sites: Vec<Site> = Site::from_json_array(&imported_data).unwrap();
 
         assert_eq!(imported_sites.len(), 2);
         assert_eq!(imported_sites[0].site_id.as_deref(), Some("S1"));
@@ -117,13 +116,15 @@ mod tests {
     #[test]
     fn test_excel_export_import() {
         let sites = get_dummy_sites();
-        let mut df = sites.to_dataframe().unwrap();
+        let data = sites.to_json_array().unwrap();
+        let cols: Vec<String> = data[0].as_object().unwrap().keys().cloned().collect();
 
         let path = PathBuf::from("test_export.xlsx");
-        super::export::export_excel(&mut df, &path).unwrap();
+        let exporter = super::export::RecordExporter::new(&data, &cols);
+        exporter.export_excel(&path).unwrap();
 
-        let mut imported_df = super::import::import_excel(&path, "Sheet1").unwrap();
-        let imported_sites: Vec<Site> = Site::from_dataframe(&mut imported_df).unwrap();
+        let imported_data = super::import::import_excel(&path, "Sheet1").unwrap();
+        let imported_sites: Vec<Site> = Site::from_json_array(&imported_data).unwrap();
 
         assert_eq!(imported_sites.len(), 2);
         assert_eq!(imported_sites[0].site_id.as_deref(), Some("S1"));
