@@ -2,6 +2,15 @@
 name = "nahpu_db"
 version = "0.1.0"
 edition = "2024"
+authors = ["Heru Handika <herubiolog@gmail.com>"]
+homepage = "https://www.nahpu.app/"
+description = "A utility crate for handling database schema and models, auto-generating Rust structs from the NAHPU SQLite Drift schema."
+repository = "https://github.com/hhandika/nahpu_api"
+license = "MIT"
+keywords = ["nahpu", "database", "sqlite", "drift", "schema"]
+categories = ["data-structures", "science"]
+readme = "README.md"
+
 
 [dependencies]
 calamine = { version = "0.35.0", features = ["dates"] }
