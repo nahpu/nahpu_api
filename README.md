@@ -1,4 +1,4 @@
-# NAHPU API
+# NAHPU API <img src="assets/nahpu-api.svg" alt="nahpu logo" align="right" width="150"/>
 
 ![nahpu-test](https://github.com/nahpu/nahpu_api/actions/workflows/test.yml/badge.svg)
 
