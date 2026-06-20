@@ -32,7 +32,6 @@ fn import_delimited(path: &Path, delimiter: u8) -> Result<Vec<Value>, String> {
                 break;
             }
             let key = headers[i].to_string();
-            // Store as string or try to parse
             let value = if val.is_empty() {
                 Value::Null
             } else if let Ok(n) = val.parse::<i64>() {
@@ -55,7 +54,6 @@ fn import_delimited(path: &Path, delimiter: u8) -> Result<Vec<Value>, String> {
     Ok(json_array)
 }
 
-/// Import an Excel (.xlsx) file into a JSON array.
 pub fn import_excel(path: &Path, sheet_name: &str) -> Result<Vec<Value>, String> {
     let mut workbook: Xlsx<BufReader<File>> =
         open_workbook(path).map_err(|e: calamine::XlsxError| e.to_string())?;

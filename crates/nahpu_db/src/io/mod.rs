@@ -14,10 +14,7 @@ pub trait NahpuImport: Sized {
     fn from_json_array(data: &[Value]) -> Result<Vec<Self>, String>;
 }
 
-impl<T> NahpuExport for [T]
-where
-    T: Serialize,
-{
+impl<T: Serialize> NahpuExport for [T] {
     fn to_json_array(&self) -> Result<Vec<Value>, String> {
         let json_value = serde_json::to_value(self).map_err(|e| e.to_string())?;
         match json_value {
@@ -27,19 +24,13 @@ where
     }
 }
 
-impl<T> NahpuExport for Vec<T>
-where
-    T: Serialize,
-{
+impl<T: Serialize> NahpuExport for Vec<T> {
     fn to_json_array(&self) -> Result<Vec<Value>, String> {
         self.as_slice().to_json_array()
     }
 }
 
-impl<T> NahpuImport for T
-where
-    T: DeserializeOwned,
-{
+impl<T: DeserializeOwned> NahpuImport for T {
     fn from_json_array(data: &[Value]) -> Result<Vec<Self>, String> {
         let json_value = Value::Array(data.to_vec());
         serde_json::from_value(json_value).map_err(|e| e.to_string())

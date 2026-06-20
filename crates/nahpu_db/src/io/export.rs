@@ -50,18 +50,14 @@ impl<'a> RecordExporter<'a> {
         Ok(())
     }
 
-    // --- Private Helper Methods ---
-
     fn write_delimited(&self, path: &Path, delimiter: u8) -> Result<(), String> {
         let mut wtr = WriterBuilder::new()
             .delimiter(delimiter)
             .from_path(path)
             .map_err(|e| e.to_string())?;
 
-        // Write headers
         wtr.write_record(self.columns).map_err(|e| e.to_string())?;
 
-        // Write rows
         for row in self.data {
             let mut string_record = Vec::new();
             if let Some(map) = row.as_object() {
