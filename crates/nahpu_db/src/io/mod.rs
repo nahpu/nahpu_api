@@ -106,6 +106,26 @@ mod tests {
     }
 
     #[test]
+    fn test_csv_export_import_raw() {
+        let sites = get_dummy_sites();
+        let data = sites.to_json_array().unwrap();
+        let cols: Vec<String> = data[0].as_object().unwrap().keys().cloned().collect();
+
+        let path = PathBuf::from("test_export_raw.csv");
+        let exporter = super::export::RecordExporter::new(&data, &cols);
+        exporter.export_csv(&path).unwrap();
+
+        let importer = super::import::RecordImporter::new(&path);
+        let raw_data = importer.import_delimited_raw(b',').unwrap();
+
+        assert_eq!(raw_data.len(), 3); // 1 header + 2 rows
+        assert_eq!(raw_data[0].len(), cols.len());
+        assert_eq!(raw_data[0], cols);
+        
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn test_excel_export_import() {
         let sites = get_dummy_sites();
         let data = sites.to_json_array().unwrap();

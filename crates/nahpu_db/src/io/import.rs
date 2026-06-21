@@ -160,6 +160,30 @@ impl<'a> RecordImporter<'a> {
         Ok(json_array)
     }
 
+    pub fn import_delimited_raw(&self, delimiter: u8) -> Result<Vec<Vec<String>>, String> {
+        let mut rdr = csv::ReaderBuilder::new()
+            .has_headers(false)
+            .delimiter(delimiter)
+            .from_path(self.path)
+            .map_err(|e| e.to_string())?;
+
+        let mut rows = Vec::new();
+        for result in rdr.records() {
+            let record = result.map_err(|e| e.to_string())?;
+            let string_row: Vec<String> = record.iter().map(|s| s.to_string()).collect();
+
+            if string_row.iter().any(|s| !s.trim().is_empty()) {
+                rows.push(string_row);
+            }
+        }
+
+        if rows.is_empty() {
+            return Err("Empty file".to_string());
+        }
+
+        Ok(rows)
+    }
+
     fn import_delimited(&self, delimiter: u8) -> Result<Vec<Value>, String> {
         let mut rdr = csv::ReaderBuilder::new()
             .has_headers(true)
