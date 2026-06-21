@@ -94,7 +94,8 @@ mod tests {
         let exporter = super::export::RecordExporter::new(&data, &cols);
         exporter.export_csv(&path).unwrap();
 
-        let imported_data = super::import::import_csv(&path).unwrap();
+        let importer = super::import::RecordImporter::new(&path);
+        let imported_data = importer.import_csv().unwrap();
         let imported_sites: Vec<Site> = Site::from_json_array(&imported_data).unwrap();
 
         assert_eq!(imported_sites.len(), 2);
@@ -114,7 +115,8 @@ mod tests {
         let exporter = super::export::RecordExporter::new(&data, &cols);
         exporter.export_excel(&path).unwrap();
 
-        let imported_data = super::import::import_excel(&path, "Sheet1").unwrap();
+        let importer = super::import::RecordImporter::new(&path);
+        let imported_data = importer.import_excel("Sheet1").unwrap();
         let imported_sites: Vec<Site> = Site::from_json_array(&imported_data).unwrap();
 
         assert_eq!(imported_sites.len(), 2);
