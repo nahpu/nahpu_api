@@ -146,7 +146,7 @@ fn create_rust_code(drift_content: &str) -> String {
                 if field_name_snake == "type" {
                     // Add serde rename attribute to map the JSON 'type' field
                     // to the Rust 'type_' field, overriding the struct-level rename_all.
-                    rust_code.push_str(&format!("    #[serde(rename = \"type\")]\n"));
+                    rust_code.push_str("    #[serde(rename = \"type\")]\n");
                     rust_code.push_str(&format!("    pub type_: {},\n", rust_type));
                 } else {
                     rust_code.push_str(&format!("    pub {}: {},\n", field_name_snake, rust_type));

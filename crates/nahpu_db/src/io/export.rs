@@ -111,7 +111,7 @@ impl<'a> RecordExporter<'a> {
             Some(Value::Null) | None => {}
             Some(other) => {
                 worksheet
-                    .write_string(row_idx, col_idx, &other.to_string())
+                    .write_string(row_idx, col_idx, other.to_string())
                     .map_err(|e| e.to_string())?;
             }
         }
