@@ -10,6 +10,11 @@ This workspace consists of several modular crates:
 - **`nahpu_archive`**: A utility crate for archiving and extracting Nahpu project data using zip compression.
 - **`nahpu_db`**: Handles database schema and models, auto-generating Rust structs from the NAHPU SQLite Drift schema.
 - **`nahpu_dwc`**: Maps and converts NAHPU project data into Darwin Core (DwC) compliant JSON and XML formats.
+- **`nahpu_gis`**: Handles GIS data processing and conversion.
+
+## Development Status
+
+All crates are experimental. Please expect breaking changes and API instability.
 
 ## Installation
 

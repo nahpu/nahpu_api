@@ -1,4 +1,3 @@
 [workspace]
 resolver = "3"
-members = ["crates/nahpu_dwc","crates/nahpu_archive", "crates/nahpu_db"]
-
+members = ["crates/nahpu_dwc","crates/nahpu_archive", "crates/nahpu_db", "crates/nahpu_gis"]
