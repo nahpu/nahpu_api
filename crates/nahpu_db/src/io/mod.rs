@@ -91,7 +91,7 @@ mod tests {
         let cols: Vec<String> = data[0].as_object().unwrap().keys().cloned().collect();
 
         let path = PathBuf::from("test_export.csv");
-        let exporter = super::export::RecordExporter::new(&data, &cols);
+        let exporter = super::export::RecordExporter::new(&data, &cols, true);
         exporter.export_csv(&path).unwrap();
 
         let importer = super::import::RecordImporter::new(&path);
@@ -112,7 +112,7 @@ mod tests {
         let cols: Vec<String> = data[0].as_object().unwrap().keys().cloned().collect();
 
         let path = PathBuf::from("test_export_raw.csv");
-        let exporter = super::export::RecordExporter::new(&data, &cols);
+        let exporter = super::export::RecordExporter::new(&data, &cols, true);
         exporter.export_csv(&path).unwrap();
 
         let importer = super::import::RecordImporter::new(&path);
@@ -132,7 +132,7 @@ mod tests {
         let cols: Vec<String> = data[0].as_object().unwrap().keys().cloned().collect();
 
         let path = PathBuf::from("test_export.xlsx");
-        let exporter = super::export::RecordExporter::new(&data, &cols);
+        let exporter = super::export::RecordExporter::new(&data, &cols, true);
         exporter.export_excel(&path).unwrap();
 
         let importer = super::import::RecordImporter::new(&path);

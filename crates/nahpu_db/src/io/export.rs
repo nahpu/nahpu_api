@@ -1,16 +1,140 @@
 use csv::WriterBuilder;
 use rust_xlsxwriter::Workbook;
 use serde_json::Value;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
+use std::fs::File;
 
-pub struct RecordExporter<'a> {
-    data: &'a [Value],
-    columns: &'a [String],
+pub struct RecordExporter {
+    data: Vec<Value>,
+    columns: Vec<String>,
 }
 
-impl<'a> RecordExporter<'a> {
-    pub fn new(data: &'a [Value], columns: &'a [String]) -> Self {
-        Self { data, columns }
+impl RecordExporter {
+    pub fn new(data: &[Value], columns: &[String], concatenate_multi_entries: bool) -> Self {
+        if concatenate_multi_entries {
+            Self {
+                data: data.to_vec(),
+                columns: columns.to_vec(),
+            }
+        } else {
+            Self::expand_multi_entries(data, columns)
+        }
+    }
+
+    fn expand_multi_entries(data: &[Value], columns: &[String]) -> Self {
+        let mut max_splits: HashMap<String, usize> = HashMap::new();
+        let mut expandable_cols = HashSet::new();
+        let mut labeled_cols = HashSet::new();
+
+        for row in data {
+            if let Some(map) = row.as_object() {
+                for col in columns {
+                    if let Some(Value::String(s)) = map.get(col) {
+                        if !s.contains('|') && !s.contains(": ") { continue; }
+                        expandable_cols.insert(col.clone());
+                        if s.contains(": ") {
+                            labeled_cols.insert(col.clone());
+                        }
+                        let splits = s.split('|').count();
+                        let max = max_splits.entry(col.clone()).or_insert(1);
+                        if splits > *max {
+                            *max = splits;
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut new_data = Vec::new();
+        let mut col_dynamic_keys: HashMap<String, BTreeSet<String>> = HashMap::new();
+
+        for row in data {
+            if let Some(map) = row.as_object() {
+                let mut new_row = serde_json::Map::new();
+                for col in columns {
+                    if expandable_cols.contains(col) {
+                        if let Some(Value::String(s)) = map.get(col) {
+                            let table_prefix = if let Some(pos) = col.find("::") {
+                                &col[..pos + 2]
+                            } else {
+                                ""
+                            };
+                            let parts: Vec<&str> = s.split('|').collect();
+                            for (i, part) in parts.iter().enumerate() {
+                                let idx = i + 1;
+                                let is_labeled = labeled_cols.contains(col);
+
+                                if !is_labeled {
+                                    let col_name = format!("{}{}", col, idx);
+                                    new_row.insert(col_name, Value::String(part.to_string()));
+                                } else {
+                                    for sub_item in part.split(';') {
+                                        let sub_item = sub_item.trim();
+                                        if let Some(pos) = sub_item.find(": ") {
+                                            let key = sub_item[..pos].trim();
+                                            let val = sub_item[pos + 2..].trim();
+                                            let mut camel_key = key.to_string();
+                                            if let Some(c) = camel_key.get_mut(0..1) {
+                                                c.make_ascii_lowercase();
+                                            }
+                                            let dyn_col_name = format!("{}{}{}", table_prefix, camel_key, idx);
+                                            col_dynamic_keys
+                                                .entry(col.clone())
+                                                .or_insert_with(BTreeSet::new)
+                                                .insert(dyn_col_name.clone());
+                                            new_row.insert(dyn_col_name, Value::String(val.to_string()));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        if let Some(v) = map.get(col) {
+                            new_row.insert(col.clone(), v.clone());
+                        }
+                    }
+                }
+                new_data.push(Value::Object(new_row));
+            }
+        }
+
+        let mut new_columns = Vec::new();
+        for col in columns {
+            if expandable_cols.contains(col) {
+                if labeled_cols.contains(col) {
+                    if let Some(keys) = col_dynamic_keys.get(col) {
+                        let mut sorted_keys: Vec<String> = keys.iter().cloned().collect();
+                        sorted_keys.sort_by(|a, b| {
+                            let extract_num = |s: &str| -> u32 {
+                                let num_str: String = s.chars().rev().take_while(|c| c.is_ascii_digit()).collect();
+                                num_str.chars().rev().collect::<String>().parse().unwrap_or(0)
+                            };
+                            let num_a = extract_num(a);
+                            let num_b = extract_num(b);
+                            if num_a != num_b {
+                                num_a.cmp(&num_b)
+                            } else {
+                                a.cmp(b)
+                            }
+                        });
+                        new_columns.extend(sorted_keys);
+                    }
+                } else {
+                    let max = max_splits.get(col).unwrap_or(&1);
+                    for i in 1..=*max {
+                        new_columns.push(format!("{}{}", col, i));
+                    }
+                }
+            } else {
+                new_columns.push(col.clone());
+            }
+        }
+
+        Self {
+            data: new_data,
+            columns: new_columns,
+        }
     }
 
     pub fn export_csv(&self, path: &Path) -> Result<(), String> {
@@ -21,18 +145,21 @@ impl<'a> RecordExporter<'a> {
         self.write_delimited(path, b'\t')
     }
 
+    pub fn export_json(&self, path: &Path) -> Result<(), String> {
+        let file = File::create(path).map_err(|e| e.to_string())?;
+        serde_json::to_writer_pretty(file, &self.data).map_err(|e| e.to_string())
+    }
+
     pub fn export_excel(&self, path: &Path) -> Result<(), String> {
         let mut workbook = Workbook::new();
         let worksheet = workbook.add_worksheet();
 
-        // Write headers
         for (col_idx, name) in self.columns.iter().enumerate() {
             worksheet
                 .write_string(0, col_idx as u16, name)
                 .map_err(|e| e.to_string())?;
         }
 
-        // Write rows
         for (row_idx, row) in self.data.iter().enumerate() {
             if let Some(map) = row.as_object() {
                 for (col_idx, col_name) in self.columns.iter().enumerate() {
@@ -56,12 +183,12 @@ impl<'a> RecordExporter<'a> {
             .from_path(path)
             .map_err(|e| e.to_string())?;
 
-        wtr.write_record(self.columns).map_err(|e| e.to_string())?;
+        wtr.write_record(&self.columns).map_err(|e| e.to_string())?;
 
-        for row in self.data {
+        for row in &self.data {
             let mut string_record = Vec::new();
             if let Some(map) = row.as_object() {
-                for col in self.columns {
+                for col in &self.columns {
                     let cell_value = self.json_value_to_string(map.get(col));
                     string_record.push(cell_value);
                 }
