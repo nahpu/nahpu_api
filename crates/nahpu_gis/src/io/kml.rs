@@ -1,22 +1,12 @@
 //! Read and write Keyhole Markup Language (KML).
 
+use crate::types::CoordinateData;
 use kml::{
     Kml, KmlDocument, KmlWriter,
     types::{Coord, Geometry, Icon, IconStyle, LineStyle, Placemark, Point, PolyStyle, Style},
 };
-use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::path::Path;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct CoordinateData {
-    pub name_id: String,
-    pub notes: Option<String>,
-    pub decimal_longitude: Option<f64>,
-    pub decimal_latitude: Option<f64>,
-    pub elevation_in_meter: Option<f64>,
-}
 
 pub struct KmlExporter<'a> {
     data: &'a [CoordinateData],
@@ -28,7 +18,7 @@ impl<'a> KmlExporter<'a> {
     }
 
     pub fn export_kml(&self, path: &Path) -> Result<(), String> {
-        let mut doc = KmlDocument::default();
+        let mut elements = vec![];
 
         let style = Style {
             id: Some("nahpu_style".to_string()),
@@ -52,7 +42,7 @@ impl<'a> KmlExporter<'a> {
             ..Default::default()
         };
 
-        doc.elements.push(Kml::Style(style));
+        elements.push(Kml::Style(style));
 
         for coord in self.data {
             if let (Some(lon), Some(lat)) = (coord.decimal_longitude, coord.decimal_latitude) {
@@ -73,14 +63,22 @@ impl<'a> KmlExporter<'a> {
                     ..Default::default()
                 };
 
-                doc.elements.push(Kml::Placemark(placemark));
+                elements.push(Kml::Placemark(placemark));
             }
         }
+
+        let doc_element = Kml::Document {
+            attrs: std::collections::HashMap::new(),
+            elements,
+        };
+
+        let mut kml_doc = KmlDocument::default();
+        kml_doc.elements.push(doc_element);
 
         let file = File::create(path).map_err(|e| e.to_string())?;
         let mut writer = KmlWriter::from_writer(file);
         writer
-            .write(&Kml::KmlDocument(doc))
+            .write(&Kml::KmlDocument(kml_doc))
             .map_err(|e| e.to_string())?;
 
         Ok(())
