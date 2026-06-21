@@ -2,6 +2,14 @@
 name = "nahpu_gis"
 version = "0.1.1"
 edition = "2024"
+authors = ["Heru Handika <herubiolog@gmail.com>"]
+description = "A utility crate for spatial analysis and GIS data processing."
+repository = "https://github.com/hhandika/nahpu_api"
+license = "MIT"
+keywords = ["spatial", "gis", "geojson", "kml", "shapefile"]
+categories = ["science"]
+readme = "README.md"
+homepage = "https://www.nahpu.app/"
 
 [dependencies]
 dbase = "0.7.0"
