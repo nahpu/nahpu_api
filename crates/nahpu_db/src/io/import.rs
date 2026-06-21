@@ -14,16 +14,122 @@ impl<'a> RecordImporter<'a> {
     }
 
     /// Import a CSV into a JSON array.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use nahpu_db::io::import::RecordImporter;
+    /// use std::path::Path;
+    ///
+    /// let path = Path::new("test/data/test.csv");
+    /// let importer = RecordImporter::new(path);
+    /// let data = importer.import_csv().unwrap();
+    /// ```
     pub fn import_csv(&self) -> Result<Vec<Value>, String> {
         self.import_delimited(b',')
     }
 
+    /// Get all sheet names from an Excel file.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use nahpu_db::io::import::RecordImporter;
+    /// use std::path::Path;
+    ///
+    /// let path = Path::new("test/data/test.xlsx");
+    /// let importer = RecordImporter::new(path);
+    /// let sheet_names = importer.get_excel_sheet_names().unwrap();
+    /// ```
+    pub fn get_excel_sheet_names(&self) -> Result<Vec<String>, String> {
+        let mut workbook: Xlsx<BufReader<File>> =
+            open_workbook(self.path).map_err(|e: calamine::XlsxError| e.to_string())?;
+        Ok(workbook.sheet_names().to_vec())
+    }
+
+    /// Import an Excel sheet into a raw 2D string grid.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use nahpu_db::io::import::RecordImporter;
+    /// use std::path::Path;
+    ///
+    /// let path = Path::new("test/data/test.xlsx");
+    /// let importer = RecordImporter::new(path);
+    /// let raw_data = importer.import_excel_raw("Sheet1").unwrap();
+    /// ```
+    pub fn import_excel_raw(&self, sheet_name: &str) -> Result<Vec<Vec<String>>, String> {
+        let mut workbook: Xlsx<BufReader<File>> =
+            open_workbook(self.path).map_err(|e: calamine::XlsxError| e.to_string())?;
+        let range = workbook
+            .worksheet_range(sheet_name)
+            .map_err(|e| e.to_string())?;
+
+        let mut rows = Vec::new();
+        for row in range.rows() {
+            let string_row: Vec<String> = row
+                .iter()
+                .map(|c| match c {
+                    calamine::Data::Empty => String::new(),
+                    calamine::Data::String(s) => s.clone(),
+                    calamine::Data::Float(f) => f.to_string(),
+                    calamine::Data::Int(i) => i.to_string(),
+                    calamine::Data::Bool(b) => b.to_string(),
+                    calamine::Data::Error(e) => e.to_string(),
+                    calamine::Data::DateTime(_) => {
+                        if let Some(dt) = c.as_datetime() {
+                            dt.to_string()
+                        } else if let Some(s) = c.as_string() {
+                            s.clone()
+                        } else {
+                            String::new()
+                        }
+                    }
+                    calamine::Data::DateTimeIso(s) | calamine::Data::DurationIso(s) => s.clone(),
+                })
+                .collect();
+            
+            if string_row.iter().any(|s| !s.trim().is_empty()) {
+                rows.push(string_row);
+            }
+        }
+
+        if rows.is_empty() {
+            return Err("Empty sheet".to_string());
+        }
+
+        Ok(rows)
+    }
+
     /// Import a TSV into a JSON array.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use nahpu_db::io::import::RecordImporter;
+    /// use std::path::Path;
+    ///
+    /// let path = Path::new("test/data/test.tsv");
+    /// let importer = RecordImporter::new(path);
+    /// let data = importer.import_tsv().unwrap();
+    /// ```
     pub fn import_tsv(&self) -> Result<Vec<Value>, String> {
         self.import_delimited(b'\t')
     }
 
     /// Import an Excel sheet into a JSON array.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use nahpu_db::io::import::RecordImporter;
+    /// use std::path::Path;
+    ///
+    /// let path = Path::new("test/data/test.xlsx");
+    /// let importer = RecordImporter::new(path);
+    /// let data = importer.import_excel("Sheet1").unwrap();
+    /// ```
     pub fn import_excel(&self, sheet_name: &str) -> Result<Vec<Value>, String> {
         let mut workbook: Xlsx<BufReader<File>> =
             open_workbook(self.path).map_err(|e: calamine::XlsxError| e.to_string())?;

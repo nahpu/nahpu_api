@@ -123,6 +123,13 @@ mod tests {
         assert_eq!(imported_sites[0].site_id.as_deref(), Some("S1"));
         assert_eq!(imported_sites[1].site_id.as_deref(), Some("S2"));
 
+        let sheet_names = importer.get_excel_sheet_names().unwrap();
+        assert_eq!(sheet_names, vec!["Sheet1"]);
+
+        let raw_data = importer.import_excel_raw("Sheet1").unwrap();
+        assert_eq!(raw_data.len(), 3); // 1 header + 2 rows
+        assert_eq!(raw_data[0].len(), cols.len());
+
         let _ = fs::remove_file(path);
     }
 }
