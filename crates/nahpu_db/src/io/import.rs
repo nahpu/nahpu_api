@@ -42,7 +42,7 @@ impl<'a> RecordImporter<'a> {
     /// let sheet_names = importer.get_excel_sheet_names().unwrap();
     /// ```
     pub fn get_excel_sheet_names(&self) -> Result<Vec<String>, String> {
-        let mut workbook: Xlsx<BufReader<File>> =
+        let workbook: Xlsx<BufReader<File>> =
             open_workbook(self.path).map_err(|e: calamine::XlsxError| e.to_string())?;
         Ok(workbook.sheet_names().to_vec())
     }
@@ -89,7 +89,7 @@ impl<'a> RecordImporter<'a> {
                     calamine::Data::DateTimeIso(s) | calamine::Data::DurationIso(s) => s.clone(),
                 })
                 .collect();
-            
+
             if string_row.iter().any(|s| !s.trim().is_empty()) {
                 rows.push(string_row);
             }
