@@ -42,6 +42,10 @@ impl<'a> ShapefileExporter<'a> {
         // We must drop the writer so it flushes the files to disk.
         drop(writer);
 
+        let prj_path = temp_dir.path().join("coordinates.prj");
+        let wgs84_prj = r#"GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]"#;
+        fs::write(&prj_path, wgs84_prj).map_err(|e| e.to_string())?;
+
         let files: Vec<PathBuf> = fs::read_dir(temp_dir.path())
             .map_err(|e| e.to_string())?
             .filter_map(|e| e.ok())

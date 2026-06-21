@@ -78,7 +78,7 @@ mod tests {
         };
 
         let temp_dir = tempdir().unwrap();
-        let path = temp_dir.path().join("test.json");
+        let path = temp_dir.path().join("test.topojson");
 
         let coords = [coord];
         let exporter = TopoJsonExporter::new(&coords);
