@@ -1,0 +1,20 @@
+[package]
+name = "nahpu_export"
+version = "0.1.0"
+edition = "2024"
+authors = ["Heru Handika <herubiolog@gmail.com>"]
+description = "A utility crate for exporting Nahpu project data into documents (Markdown, Typst, PDF)."
+repository = "https://github.com/hhandika/nahpu_api"
+license = "MIT"
+keywords = ["nahpu", "export", "pdf", "typst", "markdown"]
+categories = ["document-processing"]
+readme = "README.md"
+homepage = "https://www.nahpu.app/"
+
+[dependencies]
+chrono = "0.4"
+nahpu_db = { version = "0.4.0", path = "../nahpu_db" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+typst = "0.12.0"
+typst-pdf = "0.12.0"
