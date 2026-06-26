@@ -1,15 +1,19 @@
 use crate::models::ExportData;
 
+/// Represents the engine that converts `ExportData` records into formatted documents.
 pub struct DocumentExport {
+    /// The parsed database records containing narratives, sites, events, and specimens.
     pub data: ExportData,
 }
 
 impl DocumentExport {
+    /// Constructs a new `DocumentExport` by deserializing the provided JSON data into `ExportData`.
     pub fn new(json_data: &str) -> Result<Self, serde_json::Error> {
         let data: ExportData = serde_json::from_str(json_data)?;
         Ok(Self { data })
     }
 
+    /// Generates a standard Markdown (`.md`) representation of the database records.
     pub fn to_markdown(&self) -> String {
         let mut out = String::new();
 
@@ -71,6 +75,7 @@ impl DocumentExport {
         out
     }
 
+    /// Generates a Typst (`.typ`) source code representation of the database records.
     pub fn to_typst(&self) -> String {
         let mut out = String::new();
 
