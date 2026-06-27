@@ -24,10 +24,13 @@ impl DocumentExport {
                     out.push_str(&format!("**Date**: {}\n\n", escape_markdown(date)));
                 }
                 if let Some(site) = &record.site_id {
-                    out.push_str(&format!("**Site ID**: {}\n\n", escape_markdown(&site.to_string())));
+                    out.push_str(&format!(
+                        "**Site ID**: {}\n\n",
+                        escape_markdown(&site.to_string())
+                    ));
                 }
                 if let Some(nar) = &record.narrative {
-                    out.push_str(&format!("{}\n\n", escape_markdown(nar)));
+                    out.push_str(&format!("{}\n\n", nar));
                 }
                 out.push_str("---\n\n");
             }
@@ -63,7 +66,10 @@ impl DocumentExport {
             out.push_str("# Specimens\n\n");
             for record in specimens {
                 if let Some(fnum) = &record.field_number {
-                    out.push_str(&format!("**Field Number**: {}\n\n", escape_markdown(&fnum.to_string())));
+                    out.push_str(&format!(
+                        "**Field Number**: {}\n\n",
+                        escape_markdown(&fnum.to_string())
+                    ));
                 }
                 if let Some(cond) = &record.condition {
                     out.push_str(&format!("**Condition**: {}\n\n", escape_markdown(cond)));
@@ -86,10 +92,13 @@ impl DocumentExport {
                     out.push_str(&format!("*Date*: {}\n\n", escape_typst(date)));
                 }
                 if let Some(site) = &record.site_id {
-                    out.push_str(&format!("*Site ID*: {}\n\n", escape_typst(&site.to_string())));
+                    out.push_str(&format!(
+                        "*Site ID*: {}\n\n",
+                        escape_typst(&site.to_string())
+                    ));
                 }
                 if let Some(nar) = &record.narrative {
-                    out.push_str(&format!("{}\n\n", escape_typst(nar)));
+                    out.push_str(&format!("{}\n\n", markdown_to_typst(nar)));
                 }
                 out.push_str("#line(length: 100%)\n\n");
             }
@@ -125,7 +134,10 @@ impl DocumentExport {
             out.push_str("= Specimens\n\n");
             for record in specimens {
                 if let Some(fnum) = &record.field_number {
-                    out.push_str(&format!("*Field Number*: {}\n\n", escape_typst(&fnum.to_string())));
+                    out.push_str(&format!(
+                        "*Field Number*: {}\n\n",
+                        escape_typst(&fnum.to_string())
+                    ));
                 }
                 if let Some(cond) = &record.condition {
                     out.push_str(&format!("*Condition*: {}\n\n", escape_typst(cond)));
@@ -145,11 +157,71 @@ impl DocumentExport {
     }
 }
 
+fn markdown_to_typst(md_text: &str) -> String {
+    use pulldown_cmark::{Event, Parser, Tag, TagEnd};
+
+    let parser = Parser::new(md_text);
+    let mut out = String::with_capacity(md_text.len() * 2);
+
+    for event in parser {
+        match event {
+            Event::Text(text) => out.push_str(&escape_typst(&text)),
+            Event::Code(code) => out.push_str(&format!("`{}`", escape_typst(&code))),
+            Event::Html(html) | Event::InlineHtml(html) => out.push_str(&escape_typst(&html)),
+            Event::Start(Tag::Heading { level, .. }) => {
+                let hashes = "=".repeat(level as usize);
+                out.push_str(&format!("{} ", hashes));
+            }
+            Event::End(TagEnd::Heading(_level)) => out.push_str("\n\n"),
+            Event::Start(Tag::Paragraph) => {}
+            Event::End(TagEnd::Paragraph) => out.push_str("\n\n"),
+            Event::Start(Tag::BlockQuote(_)) => out.push_str("#quote["),
+            Event::End(TagEnd::BlockQuote(_)) => out.push_str("]\n\n"),
+            Event::Start(Tag::CodeBlock(_)) => out.push_str("```\n"),
+            Event::End(TagEnd::CodeBlock) => out.push_str("```\n\n"),
+            Event::Start(Tag::List(None)) => {} // Unordered list
+            Event::Start(Tag::List(Some(_))) => {} // Ordered list
+            Event::End(TagEnd::List(_)) => out.push('\n'),
+            Event::Start(Tag::Item) => out.push_str("- "),
+            Event::End(TagEnd::Item) => out.push('\n'),
+            Event::Start(Tag::Strong) => out.push('*'),
+            Event::End(TagEnd::Strong) => out.push('*'),
+            Event::Start(Tag::Emphasis) => out.push('_'),
+            Event::End(TagEnd::Emphasis) => out.push('_'),
+            Event::Start(Tag::Strikethrough) => out.push_str("#strike["),
+            Event::End(TagEnd::Strikethrough) => out.push(']'),
+            Event::Start(Tag::Link { dest_url, .. }) => {
+                out.push_str(&format!("#link(\"{}\")[", dest_url));
+            }
+            Event::End(TagEnd::Link) => out.push(']'),
+            Event::Start(Tag::Image { dest_url, .. }) => {
+                out.push_str(&format!("#image(\"{}\")", dest_url));
+            }
+            Event::End(TagEnd::Image) => {}
+            Event::HardBreak => out.push_str("\\ \n"),
+            Event::SoftBreak => out.push('\n'),
+            Event::Rule => out.push_str("#line(length: 100%)\n\n"),
+            Event::FootnoteReference(name) => out.push_str(&format!("#footnote[{}]", name)),
+            Event::TaskListMarker(checked) => {
+                if checked {
+                    out.push_str("[x] ");
+                } else {
+                    out.push_str("[ ] ");
+                }
+            }
+            _ => {} // Ignore other events
+        }
+    }
+
+    out.trim().to_string()
+}
+
 fn escape_markdown(text: &str) -> String {
     let mut escaped = String::with_capacity(text.len() + 10);
     for c in text.chars() {
         match c {
-            '\\' | '`' | '*' | '_' | '{' | '}' | '[' | ']' | '(' | ')' | '#' | '+' | '-' | '.' | '!' | '|' | '<' | '>' => {
+            '\\' | '`' | '*' | '_' | '{' | '}' | '[' | ']' | '(' | ')' | '#' | '+' | '-' | '.'
+            | '!' | '|' | '<' | '>' => {
                 escaped.push('\\');
                 escaped.push(c);
             }
@@ -172,4 +244,3 @@ fn escape_typst(text: &str) -> String {
     }
     escaped
 }
-

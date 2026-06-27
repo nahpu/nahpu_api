@@ -1,5 +1,5 @@
+use nahpu_db::types::nahpu_sqlite::{CollEvent, Narrative, Site, Specimen};
 use serde::{Deserialize, Serialize};
-use nahpu_db::types::nahpu_sqlite::{Narrative, Site, CollEvent, Specimen};
 
 /// Contains the root structure representing all exportable database records.
 #[derive(Serialize, Deserialize, Debug, Clone)]
