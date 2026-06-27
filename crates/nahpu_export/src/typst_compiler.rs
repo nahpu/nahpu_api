@@ -63,9 +63,13 @@ impl World for SimpleWorld {
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        Err(FileError::NotFound(
-            id.vpath().as_rootless_path().to_path_buf(),
-        ))
+        let path = id.vpath().as_rootless_path();
+        // Since we are generating the Typst source dynamically and we pass absolute paths for images,
+        // we can attempt to read from the path directly.
+        match std::fs::read(path) {
+            Ok(bytes) => Ok(bytes.into()),
+            Err(_) => Err(FileError::NotFound(path.to_path_buf())),
+        }
     }
 
     fn font(&self, id: usize) -> Option<Font> {
