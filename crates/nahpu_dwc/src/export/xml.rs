@@ -1,5 +1,5 @@
-use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use serde::Serialize;
 use serde_json::Value;
 use std::io::Cursor;
