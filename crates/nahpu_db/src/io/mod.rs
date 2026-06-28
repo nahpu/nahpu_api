@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(raw_data.len(), 3); // 1 header + 2 rows
         assert_eq!(raw_data[0].len(), cols.len());
         assert_eq!(raw_data[0], cols);
-        
+
         let _ = fs::remove_file(path);
     }
 

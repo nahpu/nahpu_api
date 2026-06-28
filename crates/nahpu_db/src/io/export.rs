@@ -2,8 +2,8 @@ use csv::WriterBuilder;
 use rust_xlsxwriter::Workbook;
 use serde_json::Value;
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::path::Path;
 use std::fs::File;
+use std::path::Path;
 
 pub struct RecordExporter {
     data: Vec<Value>,
@@ -31,7 +31,9 @@ impl RecordExporter {
             if let Some(map) = row.as_object() {
                 for col in columns {
                     if let Some(Value::String(s)) = map.get(col) {
-                        if !s.contains('|') && !s.contains(": ") { continue; }
+                        if !s.contains('|') && !s.contains(": ") {
+                            continue;
+                        }
                         expandable_cols.insert(col.clone());
                         if s.contains(": ") {
                             labeled_cols.insert(col.clone());
@@ -78,12 +80,16 @@ impl RecordExporter {
                                             if let Some(c) = camel_key.get_mut(0..1) {
                                                 c.make_ascii_lowercase();
                                             }
-                                            let dyn_col_name = format!("{}{}{}", table_prefix, camel_key, idx);
+                                            let dyn_col_name =
+                                                format!("{}{}{}", table_prefix, camel_key, idx);
                                             col_dynamic_keys
                                                 .entry(col.clone())
                                                 .or_insert_with(BTreeSet::new)
                                                 .insert(dyn_col_name.clone());
-                                            new_row.insert(dyn_col_name, Value::String(val.to_string()));
+                                            new_row.insert(
+                                                dyn_col_name,
+                                                Value::String(val.to_string()),
+                                            );
                                         }
                                     }
                                 }
@@ -107,8 +113,14 @@ impl RecordExporter {
                         let mut sorted_keys: Vec<String> = keys.iter().cloned().collect();
                         sorted_keys.sort_by(|a, b| {
                             let extract_num = |s: &str| -> u32 {
-                                let num_str: String = s.chars().rev().take_while(|c| c.is_ascii_digit()).collect();
-                                num_str.chars().rev().collect::<String>().parse().unwrap_or(0)
+                                let num_str: String =
+                                    s.chars().rev().take_while(|c| c.is_ascii_digit()).collect();
+                                num_str
+                                    .chars()
+                                    .rev()
+                                    .collect::<String>()
+                                    .parse()
+                                    .unwrap_or(0)
                             };
                             let num_a = extract_num(a);
                             let num_b = extract_num(b);
