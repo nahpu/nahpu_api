@@ -30,12 +30,20 @@ impl<'a> ShapefileExporter<'a> {
                 let point = PointZ::new(lon, lat, elev, 0.0);
 
                 let mut record = dbase::Record::default();
-                record.insert("nameId".to_string(), dbase::FieldValue::Character(Some(coord.name_id.clone())));
+                record.insert(
+                    "nameId".to_string(),
+                    dbase::FieldValue::Character(Some(coord.name_id.clone())),
+                );
                 if let Some(notes) = &coord.notes {
-                    record.insert("notes".to_string(), dbase::FieldValue::Character(Some(notes.clone())));
+                    record.insert(
+                        "notes".to_string(),
+                        dbase::FieldValue::Character(Some(notes.clone())),
+                    );
                 }
 
-                writer.write_shape_and_record(&point, &record).map_err(|e| e.to_string())?;
+                writer
+                    .write_shape_and_record(&point, &record)
+                    .map_err(|e| e.to_string())?;
             }
         }
 

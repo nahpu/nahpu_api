@@ -13,6 +13,7 @@ homepage = "https://www.nahpu.app/"
 
 [dependencies]
 dbase = "0.7.0"
+geo = "0.29"
 geojson = "1.0.0"
 kml = { version = "0.13.0", default-features = false }
 nahpu_archive = { version = "0.1.0", path = "../nahpu_archive" }
@@ -20,3 +21,4 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 shapefile = "0.8.0"
 tempfile = "3.27.0"
+utm = "0.1"

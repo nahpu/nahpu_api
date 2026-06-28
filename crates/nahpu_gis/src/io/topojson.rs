@@ -22,10 +22,17 @@ impl<'a> TopoJsonExporter<'a> {
             if let (Some(lon), Some(lat)) = (coord.decimal_longitude, coord.decimal_latitude) {
                 let mut geometry = Map::new();
                 geometry.insert("type".to_string(), Value::String("Point".to_string()));
-                
+
                 let coords = match coord.elevation_in_meter {
-                    Some(elev) => vec![Value::Number(serde_json::Number::from_f64(lon).unwrap()), Value::Number(serde_json::Number::from_f64(lat).unwrap()), Value::Number(serde_json::Number::from_f64(elev).unwrap())],
-                    None => vec![Value::Number(serde_json::Number::from_f64(lon).unwrap()), Value::Number(serde_json::Number::from_f64(lat).unwrap())],
+                    Some(elev) => vec![
+                        Value::Number(serde_json::Number::from_f64(lon).unwrap()),
+                        Value::Number(serde_json::Number::from_f64(lat).unwrap()),
+                        Value::Number(serde_json::Number::from_f64(elev).unwrap()),
+                    ],
+                    None => vec![
+                        Value::Number(serde_json::Number::from_f64(lon).unwrap()),
+                        Value::Number(serde_json::Number::from_f64(lat).unwrap()),
+                    ],
                 };
                 geometry.insert("coordinates".to_string(), Value::Array(coords));
 
@@ -41,7 +48,10 @@ impl<'a> TopoJsonExporter<'a> {
         }
 
         let mut points_collection = Map::new();
-        points_collection.insert("type".to_string(), Value::String("GeometryCollection".to_string()));
+        points_collection.insert(
+            "type".to_string(),
+            Value::String("GeometryCollection".to_string()),
+        );
         points_collection.insert("geometries".to_string(), Value::Array(geometries));
 
         let mut objects = Map::new();
