@@ -66,10 +66,31 @@ impl World for SimpleWorld {
         let path = id.vpath().as_rootless_path();
         // Since we are generating the Typst source dynamically and we pass absolute paths for images,
         // we can attempt to read from the path directly.
-        match std::fs::read(path) {
-            Ok(bytes) => Ok(bytes.into()),
-            Err(_) => Err(FileError::NotFound(path.to_path_buf())),
+        if let Ok(bytes) = std::fs::read(path) {
+            return Ok(bytes.into());
         }
+
+        // On Unix/macOS, try prepending `/` to make it absolute if it was originally an absolute path
+        let with_slash = std::path::Path::new("/").join(path);
+        if let Ok(bytes) = std::fs::read(&with_slash) {
+            return Ok(bytes.into());
+        }
+
+        // On Windows, handle cases where the path starts with a drive letter (e.g. C/Users/... or C:/Users/...)
+        #[cfg(windows)]
+        {
+            let path_str = path.to_string_lossy();
+            if path_str.len() >= 2 && path_str.as_bytes()[1] == b'/' {
+                let drive = &path_str[0..1];
+                let rest = &path_str[2..];
+                let win_path = format!("{}:\\{}", drive, rest.replace('/', "\\"));
+                if let Ok(bytes) = std::fs::read(&win_path) {
+                    return Ok(bytes.into());
+                }
+            }
+        }
+
+        Err(FileError::NotFound(path.to_path_buf()))
     }
 
     fn font(&self, id: usize) -> Option<Font> {
