@@ -7,7 +7,7 @@ description = "A utility crate for managing user configuration and document pres
 repository = "https://github.com/hhandika/nahpu_api"
 license = "MIT"
 keywords = ["nahpu", "config", "settings"]
-categories = ["configuration", "database-implementations"]
+categories = ["science", "database-implementations"]
 readme = "README.md"
 homepage = "https://www.nahpu.app/"
 
