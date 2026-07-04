@@ -12,6 +12,7 @@ This workspace consists of several modular crates:
 - **`nahpu_dwc`**: Maps and converts NAHPU project data into Darwin Core (DwC) compliant JSON and XML formats.
 - **`nahpu_export`**: Renders database records into formatted documents such as Markdown, Typst, and PDF.
 - **`nahpu_gis`**: Handles GIS data processing and conversion.
+- **`nahpu_configs`**: Manages user configuration and document presets for NAHPU.
 
 ## Development Status
 
