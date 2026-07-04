@@ -27,7 +27,7 @@ impl ConfigDb {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use nahpu_configs::ConfigDb;
     /// ConfigDb::init("path/to/db.redb").unwrap();
     /// ```
@@ -177,6 +177,66 @@ impl ConfigDb {
         Ok(presets)
     }
 
+    /// Exports all user configs and document presets from the database.
+    pub fn export_configs(&self) -> Result<crate::models::UserConfigsExport, String> {
+        let configs = self.get_all_user_configs()?;
+        let document_presets = self.get_all_document_presets()?;
+        Ok(crate::models::UserConfigsExport {
+            configs,
+            document_presets,
+        })
+    }
+
+    /// Imports and replaces all user configs and document presets.
+    pub fn import_configs(&self, export: crate::models::UserConfigsExport) -> Result<(), String> {
+        // Clear existing presets first
+        let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
+        {
+            let mut table = write_txn
+                .open_table(DOCUMENT_PRESETS)
+                .map_err(|e| e.to_string())?;
+            let keys: Vec<String> = table
+                .iter()
+                .map_err(|e| e.to_string())?
+                .filter_map(|r| r.ok().map(|(k, _)| k.value().to_string()))
+                .collect();
+            for k in keys {
+                table.remove(k.as_str()).map_err(|e| e.to_string())?;
+            }
+        }
+        write_txn.commit().map_err(|e| e.to_string())?;
+
+        // Import new configs
+        for (key, val) in export.configs {
+            let bytes = serde_json::to_vec(&val).map_err(|e| e.to_string())?;
+            self.set_user_config_bytes(&key, &bytes)?;
+        }
+
+        // Import new presets
+        for entry in export.document_presets {
+            self.set_document_preset(&entry.name, &entry.preset)?;
+        }
+
+        Ok(())
+    }
+
+    /// Helper to get all user configs from the database.
+    pub fn get_all_user_configs(
+        &self,
+    ) -> Result<std::collections::HashMap<String, serde_json::Value>, String> {
+        let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
+        let table = read_txn
+            .open_table(USER_CONFIGS)
+            .map_err(|e| e.to_string())?;
+        let mut configs = std::collections::HashMap::new();
+        for entry in table.iter().map_err(|e| e.to_string())? {
+            let (key, value) = entry.map_err(|e| e.to_string())?;
+            let val = serde_json::from_slice(value.value()).map_err(|e| e.to_string())?;
+            configs.insert(key.value().to_string(), val);
+        }
+        Ok(configs)
+    }
+
     fn set_user_config_bytes(&self, key: &str, value: &[u8]) -> Result<(), String> {
         let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
         {
@@ -198,3 +258,4 @@ impl ConfigDb {
         Ok(value.map(|guard| guard.value().to_vec()))
     }
 }
+

@@ -83,3 +83,13 @@ pub struct ConfigPresetEntry {
     /// Preset details.
     pub preset: ConfigExportPreset,
 }
+
+/// Represents a complete bundle of user configurations and presets for export.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserConfigsExport {
+    /// Map of configuration keys to their values.
+    pub configs: HashMap<String, serde_json::Value>,
+    /// List of document presets.
+    pub document_presets: Vec<ConfigPresetEntry>,
+}
+
