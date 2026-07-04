@@ -123,6 +123,17 @@ pub struct DocumentLayoutPreset {
     pub blocks: Vec<DocumentLayoutBlock>,
 }
 
+/// Represents whether a stored document layout can be read by the current schema.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DocumentLayoutStatus {
+    /// Name of the stored document layout.
+    pub name: String,
+    /// Whether the stored layout can be deserialized by the current schema.
+    pub is_compatible: bool,
+    /// Deserialization error for incompatible layouts.
+    pub error: Option<String>,
+}
+
 /// Represents a complete bundle of user configurations and presets for export.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserConfigsExport {

@@ -3,12 +3,16 @@
 //! Provides the storage layer and CRUD operations for managing user settings,
 //! project configurations, and document presets.
 
-use crate::models::{ConfigExportPreset, ConfigPresetEntry, DocumentLayoutPreset, TemplatePresetEntry};
+use crate::models::{
+    ConfigExportPreset, ConfigPresetEntry, DocumentLayoutPreset, DocumentLayoutStatus,
+    TemplatePresetEntry,
+};
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use std::sync::OnceLock;
 
 const USER_CONFIGS: TableDefinition<&str, &[u8]> = TableDefinition::new("user_configs");
-const RECORD_EXPORT_PRESETS: TableDefinition<&str, &[u8]> = TableDefinition::new("record_export_presets");
+const RECORD_EXPORT_PRESETS: TableDefinition<&str, &[u8]> =
+    TableDefinition::new("record_export_presets");
 const TEMPLATE_PRESETS: TableDefinition<&str, &[u8]> = TableDefinition::new("template_presets");
 const DOCUMENT_LAYOUTS: TableDefinition<&str, &[u8]> = TableDefinition::new("document_layouts");
 
@@ -140,7 +144,10 @@ impl ConfigDb {
     }
 
     /// Retrieves a saved record export preset by name.
-    pub fn get_record_export_preset(&self, name: &str) -> Result<Option<ConfigExportPreset>, String> {
+    pub fn get_record_export_preset(
+        &self,
+        name: &str,
+    ) -> Result<Option<ConfigExportPreset>, String> {
         let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
         let table = read_txn
             .open_table(RECORD_EXPORT_PRESETS)
@@ -312,6 +319,26 @@ impl ConfigDb {
             layouts.push(layout);
         }
         Ok(layouts)
+    }
+
+    /// Retrieves compatibility status for every stored document layout preset.
+    pub fn get_document_layout_statuses(&self) -> Result<Vec<DocumentLayoutStatus>, String> {
+        let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
+        let table = read_txn
+            .open_table(DOCUMENT_LAYOUTS)
+            .map_err(|e| e.to_string())?;
+        let mut statuses = Vec::new();
+        for entry in table.iter().map_err(|e| e.to_string())? {
+            let (key, value) = entry.map_err(|e| e.to_string())?;
+            let name = key.value().to_string();
+            let result = serde_json::from_slice::<DocumentLayoutPreset>(value.value());
+            statuses.push(DocumentLayoutStatus {
+                name,
+                is_compatible: result.is_ok(),
+                error: result.err().map(|e| e.to_string()),
+            });
+        }
+        Ok(statuses)
     }
 
     /// Exports all user configs, record export presets, and template presets from the database.
@@ -509,6 +536,44 @@ mod tests {
         assert!(db.get_document_layout("Test Layout").unwrap().is_none());
 
         // Clean up
+        let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn test_document_layout_statuses_include_invalid_layouts() {
+        let mut db_path = std::env::temp_dir();
+        db_path.push(format!(
+            "test_config_status_{}.redb",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let db_path_str = db_path.to_str().unwrap();
+
+        ConfigDb::init(db_path_str).unwrap();
+        let db = ConfigDb::get_instance().unwrap();
+
+        let write_txn = db.database.begin_write().unwrap();
+        {
+            let mut table = write_txn.open_table(DOCUMENT_LAYOUTS).unwrap();
+            table
+                .insert(
+                    "Old Layout",
+                    br#"{"name":"Old Layout","blocks":[{"label_count":1}]}"#.as_slice(),
+                )
+                .unwrap();
+        }
+        write_txn.commit().unwrap();
+
+        let statuses = db.get_document_layout_statuses().unwrap();
+        let status = statuses.iter().find(|s| s.name == "Old Layout").unwrap();
+        assert!(!status.is_compatible);
+        assert!(status.error.is_some());
+
+        db.delete_document_layout("Old Layout").unwrap();
+        assert!(db.get_document_layout_statuses().unwrap().is_empty());
+
         let _ = std::fs::remove_file(db_path);
     }
 }
