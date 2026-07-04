@@ -152,13 +152,13 @@ mod tests {
             page_pad_bottom_mm: 8.0,
             blocks: vec![DocumentLayoutBlock {
                 template_name: "test_template".to_string(),
-                label_count: 1,
+                template_count: 1,
                 rows: 8,
                 cols: 4,
-                label_pad_top_mm: 1.0,
-                label_pad_left_mm: 1.0,
-                label_pad_right_mm: 1.0,
-                label_pad_bottom_mm: 1.0,
+                template_pad_top_mm: 1.0,
+                template_pad_left_mm: 1.0,
+                template_pad_right_mm: 1.0,
+                template_pad_bottom_mm: 1.0,
                 page_break_after: false,
             }],
         }];

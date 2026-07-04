@@ -97,13 +97,13 @@ pub struct TemplatePresetEntry {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DocumentLayoutBlock {
     pub template_name: String,
-    pub label_count: i32,
+    pub template_count: i32,
     pub rows: i32,
     pub cols: i32,
-    pub label_pad_top_mm: f64,
-    pub label_pad_left_mm: f64,
-    pub label_pad_right_mm: f64,
-    pub label_pad_bottom_mm: f64,
+    pub template_pad_top_mm: f64,
+    pub template_pad_left_mm: f64,
+    pub template_pad_right_mm: f64,
+    pub template_pad_bottom_mm: f64,
     pub page_break_after: bool,
 }
 
