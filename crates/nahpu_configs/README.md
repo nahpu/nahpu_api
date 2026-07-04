@@ -2,7 +2,7 @@
 
 A utility crate for managing user configuration and document presets for NAHPU (Natural History Project Utility).
 
-It provides data models, a `redb` storage layer, and utility functions for exporting and importing preferences in JSON and KDL formats.
+It provides data models, a `redb` storage layer, and utility functions for exporting and importing preferences in JSON and JSON Lines formats.
 
 ## Example Usage
 
@@ -44,9 +44,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let json_str = serde_json::to_string_pretty(&export)?;
     fs::write("configs.json", json_str)?;
     
-    // Serialize to KDL
-    let kdl_str = nahpu_configs::kdl::export_to_kdl(&export);
-    fs::write("configs.kdl", kdl_str)?;
+    // Serialize to JSON Lines (json.nl)
+    let json_lines_str = nahpu_configs::json_lines::export_to_json_lines(&export);
+    fs::write("configs.json.nl", json_lines_str)?;
     
     Ok(())
 }

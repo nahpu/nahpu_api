@@ -3,13 +3,14 @@
 //! Provides the storage layer and CRUD operations for managing user settings,
 //! project configurations, and document presets.
 
-use crate::models::{ConfigExportPreset, ConfigPresetEntry, TemplatePresetEntry};
+use crate::models::{ConfigExportPreset, ConfigPresetEntry, DocumentLayoutPreset, TemplatePresetEntry};
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use std::sync::OnceLock;
 
 const USER_CONFIGS: TableDefinition<&str, &[u8]> = TableDefinition::new("user_configs");
 const RECORD_EXPORT_PRESETS: TableDefinition<&str, &[u8]> = TableDefinition::new("record_export_presets");
 const TEMPLATE_PRESETS: TableDefinition<&str, &[u8]> = TableDefinition::new("template_presets");
+const DOCUMENT_LAYOUTS: TableDefinition<&str, &[u8]> = TableDefinition::new("document_layouts");
 
 static INSTANCE: OnceLock<ConfigDb> = OnceLock::new();
 
@@ -48,6 +49,9 @@ impl ConfigDb {
                 .map_err(|e| e.to_string())?;
             let _table3 = write_txn
                 .open_table(TEMPLATE_PRESETS)
+                .map_err(|e| e.to_string())?;
+            let _table4 = write_txn
+                .open_table(DOCUMENT_LAYOUTS)
                 .map_err(|e| e.to_string())?;
         }
         write_txn.commit().map_err(|e| e.to_string())?;
@@ -247,15 +251,80 @@ impl ConfigDb {
         Ok(presets)
     }
 
+    /// Saves a document layout preset.
+    pub fn set_document_layout(
+        &self,
+        name: &str,
+        layout: &DocumentLayoutPreset,
+    ) -> Result<(), String> {
+        let bytes = serde_json::to_vec(layout).map_err(|e| e.to_string())?;
+        let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
+        {
+            let mut table = write_txn
+                .open_table(DOCUMENT_LAYOUTS)
+                .map_err(|e| e.to_string())?;
+            table
+                .insert(name, bytes.as_slice())
+                .map_err(|e| e.to_string())?;
+        }
+        write_txn.commit().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Retrieves a saved document layout preset by name.
+    pub fn get_document_layout(&self, name: &str) -> Result<Option<DocumentLayoutPreset>, String> {
+        let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
+        let table = read_txn
+            .open_table(DOCUMENT_LAYOUTS)
+            .map_err(|e| e.to_string())?;
+        match table.get(name).map_err(|e| e.to_string())? {
+            Some(guard) => {
+                let layout = serde_json::from_slice(guard.value()).map_err(|e| e.to_string())?;
+                Ok(Some(layout))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Deletes a document layout preset.
+    pub fn delete_document_layout(&self, name: &str) -> Result<(), String> {
+        let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
+        {
+            let mut table = write_txn
+                .open_table(DOCUMENT_LAYOUTS)
+                .map_err(|e| e.to_string())?;
+            table.remove(name).map_err(|e| e.to_string())?;
+        }
+        write_txn.commit().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Retrieves all document layout presets from the database.
+    pub fn get_all_document_layouts(&self) -> Result<Vec<DocumentLayoutPreset>, String> {
+        let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
+        let table = read_txn
+            .open_table(DOCUMENT_LAYOUTS)
+            .map_err(|e| e.to_string())?;
+        let mut layouts = Vec::new();
+        for entry in table.iter().map_err(|e| e.to_string())? {
+            let (_key, value) = entry.map_err(|e| e.to_string())?;
+            let layout = serde_json::from_slice(value.value()).map_err(|e| e.to_string())?;
+            layouts.push(layout);
+        }
+        Ok(layouts)
+    }
+
     /// Exports all user configs, record export presets, and template presets from the database.
     pub fn export_configs(&self) -> Result<crate::models::UserConfigsExport, String> {
         let configs = self.get_all_user_configs()?;
         let record_export_presets = self.get_all_record_export_presets()?;
         let template_presets = self.get_all_template_presets()?;
+        let document_layouts = self.get_all_document_layouts()?;
         Ok(crate::models::UserConfigsExport {
             configs,
             record_export_presets,
             template_presets,
+            document_layouts,
         })
     }
 
@@ -295,6 +364,23 @@ impl ConfigDb {
         }
         write_txn.commit().map_err(|e| e.to_string())?;
 
+        // Clear existing document layouts
+        let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
+        {
+            let mut table = write_txn
+                .open_table(DOCUMENT_LAYOUTS)
+                .map_err(|e| e.to_string())?;
+            let keys: Vec<String> = table
+                .iter()
+                .map_err(|e| e.to_string())?
+                .filter_map(|r| r.ok().map(|(k, _)| k.value().to_string()))
+                .collect();
+            for k in keys {
+                table.remove(k.as_str()).map_err(|e| e.to_string())?;
+            }
+        }
+        write_txn.commit().map_err(|e| e.to_string())?;
+
         // Import new configs
         for (key, val) in export.configs {
             let bytes = serde_json::to_vec(&val).map_err(|e| e.to_string())?;
@@ -309,6 +395,11 @@ impl ConfigDb {
         // Import new template presets
         for entry in export.template_presets {
             self.set_template_preset(&entry.name, &entry.value)?;
+        }
+
+        // Import new document layouts
+        for entry in export.document_layouts {
+            self.set_document_layout(&entry.name, &entry)?;
         }
 
         Ok(())
@@ -350,5 +441,74 @@ impl ConfigDb {
             .map_err(|e| e.to_string())?;
         let value = table.get(key).map_err(|e| e.to_string())?;
         Ok(value.map(|guard| guard.value().to_vec()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{DocumentLayoutBlock, DocumentLayoutPreset};
+
+    #[test]
+    fn test_document_layout_crud() {
+        let mut db_path = std::env::temp_dir();
+        db_path.push(format!(
+            "test_config_{}.redb",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let db_path_str = db_path.to_str().unwrap();
+
+        ConfigDb::init(db_path_str).unwrap();
+        let db = ConfigDb::get_instance().unwrap();
+
+        let block = DocumentLayoutBlock {
+            template_name: "Standard".to_string(),
+            label_count: 1,
+            rows: 8,
+            cols: 4,
+            label_pad_top_mm: 1.0,
+            label_pad_left_mm: 1.0,
+            label_pad_right_mm: 1.0,
+            label_pad_bottom_mm: 1.0,
+            page_break_after: false,
+        };
+
+        let layout = DocumentLayoutPreset {
+            name: "Test Layout".to_string(),
+            layout_type: "WholePage".to_string(),
+            page_size_key: "Letter".to_string(),
+            page_orientation: "portrait".to_string(),
+            custom_page_width_mm: None,
+            custom_page_height_mm: None,
+            page_pad_top_mm: 8.0,
+            page_pad_left_mm: 8.0,
+            page_pad_right_mm: 8.0,
+            page_pad_bottom_mm: 8.0,
+            blocks: vec![block],
+        };
+
+        // Insert
+        db.set_document_layout("Test Layout", &layout).unwrap();
+
+        // Retrieve
+        let retrieved = db.get_document_layout("Test Layout").unwrap().unwrap();
+        assert_eq!(retrieved.name, "Test Layout");
+        assert_eq!(retrieved.layout_type, "WholePage");
+        assert_eq!(retrieved.blocks.len(), 1);
+        assert_eq!(retrieved.blocks[0].template_name, "Standard");
+
+        // Retrieve all
+        let all = db.get_all_document_layouts().unwrap();
+        assert!(all.iter().any(|l| l.name == "Test Layout"));
+
+        // Delete
+        db.delete_document_layout("Test Layout").unwrap();
+        assert!(db.get_document_layout("Test Layout").unwrap().is_none());
+
+        // Clean up
+        let _ = std::fs::remove_file(db_path);
     }
 }

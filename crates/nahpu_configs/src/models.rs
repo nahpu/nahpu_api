@@ -93,6 +93,36 @@ pub struct TemplatePresetEntry {
     pub value: serde_json::Value,
 }
 
+/// Represents a layout block within a document.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DocumentLayoutBlock {
+    pub template_name: String,
+    pub label_count: i32,
+    pub rows: i32,
+    pub cols: i32,
+    pub label_pad_top_mm: f64,
+    pub label_pad_left_mm: f64,
+    pub label_pad_right_mm: f64,
+    pub label_pad_bottom_mm: f64,
+    pub page_break_after: bool,
+}
+
+/// Represents the overall configuration for document layouts.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DocumentLayoutPreset {
+    pub name: String,
+    pub layout_type: String, // "WholePage" or "Continuous"
+    pub page_size_key: String,
+    pub page_orientation: String,
+    pub custom_page_width_mm: Option<f64>,
+    pub custom_page_height_mm: Option<f64>,
+    pub page_pad_top_mm: f64,
+    pub page_pad_left_mm: f64,
+    pub page_pad_right_mm: f64,
+    pub page_pad_bottom_mm: f64,
+    pub blocks: Vec<DocumentLayoutBlock>,
+}
+
 /// Represents a complete bundle of user configurations and presets for export.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserConfigsExport {
@@ -102,4 +132,7 @@ pub struct UserConfigsExport {
     pub record_export_presets: Vec<ConfigPresetEntry>,
     /// List of template presets.
     pub template_presets: Vec<TemplatePresetEntry>,
+    /// List of document layouts.
+    #[serde(default)]
+    pub document_layouts: Vec<DocumentLayoutPreset>,
 }
