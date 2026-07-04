@@ -96,14 +96,21 @@ pub struct TemplatePresetEntry {
 /// Represents a layout block within a document.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DocumentLayoutBlock {
+    #[serde(alias = "templateName")]
     pub template_name: String,
+    #[serde(alias = "templateCount")]
     pub template_count: i32,
     pub rows: i32,
     pub cols: i32,
+    #[serde(alias = "templatePadTopMm")]
     pub template_pad_top_mm: f64,
+    #[serde(alias = "templatePadLeftMm")]
     pub template_pad_left_mm: f64,
+    #[serde(alias = "templatePadRightMm")]
     pub template_pad_right_mm: f64,
+    #[serde(alias = "templatePadBottomMm")]
     pub template_pad_bottom_mm: f64,
+    #[serde(alias = "pageBreakAfter")]
     pub page_break_after: bool,
 }
 
@@ -111,14 +118,23 @@ pub struct DocumentLayoutBlock {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DocumentLayoutPreset {
     pub name: String,
+    #[serde(alias = "layoutType")]
     pub layout_type: String, // "WholePage" or "Continuous"
+    #[serde(alias = "pageSizeKey")]
     pub page_size_key: String,
+    #[serde(alias = "pageOrientation")]
     pub page_orientation: String,
+    #[serde(alias = "customPageWidthMm")]
     pub custom_page_width_mm: Option<f64>,
+    #[serde(alias = "customPageHeightMm")]
     pub custom_page_height_mm: Option<f64>,
+    #[serde(alias = "pagePadTopMm")]
     pub page_pad_top_mm: f64,
+    #[serde(alias = "pagePadLeftMm")]
     pub page_pad_left_mm: f64,
+    #[serde(alias = "pagePadRightMm")]
     pub page_pad_right_mm: f64,
+    #[serde(alias = "pagePadBottomMm")]
     pub page_pad_bottom_mm: f64,
     pub blocks: Vec<DocumentLayoutBlock>,
 }
