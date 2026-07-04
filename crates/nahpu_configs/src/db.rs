@@ -39,14 +39,19 @@ impl ConfigDb {
         let database = Database::create(path).map_err(|e| e.to_string())?;
         let write_txn = database.begin_write().map_err(|e| e.to_string())?;
         {
-            let _table1 = write_txn.open_table(USER_CONFIGS).map_err(|e| e.to_string())?;
-            let _table2 = write_txn.open_table(DOCUMENT_PRESETS).map_err(|e| e.to_string())?;
+            let _table1 = write_txn
+                .open_table(USER_CONFIGS)
+                .map_err(|e| e.to_string())?;
+            let _table2 = write_txn
+                .open_table(DOCUMENT_PRESETS)
+                .map_err(|e| e.to_string())?;
         }
         write_txn.commit().map_err(|e| e.to_string())?;
 
         let manager = ConfigDb { database };
         if INSTANCE.set(manager).is_err() {
             // Already set by another thread concurrently.
+            println!("ConfigDb already initialized");
         }
 
         Ok(())
@@ -97,7 +102,9 @@ impl ConfigDb {
     pub fn delete_user_config(&self, key: &str) -> Result<(), String> {
         let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
         {
-            let mut table = write_txn.open_table(USER_CONFIGS).map_err(|e| e.to_string())?;
+            let mut table = write_txn
+                .open_table(USER_CONFIGS)
+                .map_err(|e| e.to_string())?;
             table.remove(key).map_err(|e| e.to_string())?;
         }
         write_txn.commit().map_err(|e| e.to_string())?;
@@ -105,12 +112,20 @@ impl ConfigDb {
     }
 
     /// Saves a document export preset configuration.
-    pub fn set_document_preset(&self, name: &str, preset: &ConfigExportPreset) -> Result<(), String> {
+    pub fn set_document_preset(
+        &self,
+        name: &str,
+        preset: &ConfigExportPreset,
+    ) -> Result<(), String> {
         let bytes = serde_json::to_vec(preset).map_err(|e| e.to_string())?;
         let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
         {
-            let mut table = write_txn.open_table(DOCUMENT_PRESETS).map_err(|e| e.to_string())?;
-            table.insert(name, bytes.as_slice()).map_err(|e| e.to_string())?;
+            let mut table = write_txn
+                .open_table(DOCUMENT_PRESETS)
+                .map_err(|e| e.to_string())?;
+            table
+                .insert(name, bytes.as_slice())
+                .map_err(|e| e.to_string())?;
         }
         write_txn.commit().map_err(|e| e.to_string())?;
         Ok(())
@@ -119,7 +134,9 @@ impl ConfigDb {
     /// Retrieves a saved document export preset by name.
     pub fn get_document_preset(&self, name: &str) -> Result<Option<ConfigExportPreset>, String> {
         let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
-        let table = read_txn.open_table(DOCUMENT_PRESETS).map_err(|e| e.to_string())?;
+        let table = read_txn
+            .open_table(DOCUMENT_PRESETS)
+            .map_err(|e| e.to_string())?;
         match table.get(name).map_err(|e| e.to_string())? {
             Some(guard) => {
                 let preset = serde_json::from_slice(guard.value()).map_err(|e| e.to_string())?;
@@ -133,7 +150,9 @@ impl ConfigDb {
     pub fn delete_document_preset(&self, name: &str) -> Result<(), String> {
         let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
         {
-            let mut table = write_txn.open_table(DOCUMENT_PRESETS).map_err(|e| e.to_string())?;
+            let mut table = write_txn
+                .open_table(DOCUMENT_PRESETS)
+                .map_err(|e| e.to_string())?;
             table.remove(name).map_err(|e| e.to_string())?;
         }
         write_txn.commit().map_err(|e| e.to_string())?;
@@ -143,7 +162,9 @@ impl ConfigDb {
     /// Retrieves all document presets from the database.
     pub fn get_all_document_presets(&self) -> Result<Vec<ConfigPresetEntry>, String> {
         let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
-        let table = read_txn.open_table(DOCUMENT_PRESETS).map_err(|e| e.to_string())?;
+        let table = read_txn
+            .open_table(DOCUMENT_PRESETS)
+            .map_err(|e| e.to_string())?;
         let mut presets = Vec::new();
         for entry in table.iter().map_err(|e| e.to_string())? {
             let (key, value) = entry.map_err(|e| e.to_string())?;
@@ -159,7 +180,9 @@ impl ConfigDb {
     fn set_user_config_bytes(&self, key: &str, value: &[u8]) -> Result<(), String> {
         let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
         {
-            let mut table = write_txn.open_table(USER_CONFIGS).map_err(|e| e.to_string())?;
+            let mut table = write_txn
+                .open_table(USER_CONFIGS)
+                .map_err(|e| e.to_string())?;
             table.insert(key, value).map_err(|e| e.to_string())?;
         }
         write_txn.commit().map_err(|e| e.to_string())?;
@@ -168,7 +191,9 @@ impl ConfigDb {
 
     fn get_user_config_bytes(&self, key: &str) -> Result<Option<Vec<u8>>, String> {
         let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
-        let table = read_txn.open_table(USER_CONFIGS).map_err(|e| e.to_string())?;
+        let table = read_txn
+            .open_table(USER_CONFIGS)
+            .map_err(|e| e.to_string())?;
         let value = table.get(key).map_err(|e| e.to_string())?;
         Ok(value.map(|guard| guard.value().to_vec()))
     }
