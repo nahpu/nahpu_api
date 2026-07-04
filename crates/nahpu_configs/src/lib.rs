@@ -8,5 +8,7 @@ pub mod kdl;
 pub mod models;
 
 pub use db::ConfigDb;
-pub use models::{ConfigCombinedField, ConfigExportPreset, ConfigPresetEntry, UserConfigsExport};
-
+pub use models::{
+    ConfigCombinedField, ConfigExportPreset, ConfigPresetEntry, TemplatePresetEntry,
+    UserConfigsExport,
+};

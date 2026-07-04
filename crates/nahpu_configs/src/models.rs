@@ -84,12 +84,22 @@ pub struct ConfigPresetEntry {
     pub preset: ConfigExportPreset,
 }
 
+/// Represents a single template preset entry stored under a specific name.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TemplatePresetEntry {
+    /// Name of the template preset.
+    pub name: String,
+    /// Template configuration JSON blob.
+    pub value: serde_json::Value,
+}
+
 /// Represents a complete bundle of user configurations and presets for export.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserConfigsExport {
     /// Map of configuration keys to their values.
     pub configs: HashMap<String, serde_json::Value>,
-    /// List of document presets.
-    pub document_presets: Vec<ConfigPresetEntry>,
+    /// List of record export presets.
+    pub record_export_presets: Vec<ConfigPresetEntry>,
+    /// List of template presets.
+    pub template_presets: Vec<TemplatePresetEntry>,
 }
-
