@@ -132,6 +132,8 @@ mod tests {
 
         let template_presets = vec![TemplatePresetEntry {
             name: "test_template".to_string(),
+            record_type: "specimen".to_string(),
+            description: "".to_string(),
             value: json!({
                 "name": "test_template",
                 "page1": {},

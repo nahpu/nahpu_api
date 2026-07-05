@@ -249,9 +249,25 @@ impl ConfigDb {
         let mut presets = Vec::new();
         for entry in table.iter().map_err(|e| e.to_string())? {
             let (key, value) = entry.map_err(|e| e.to_string())?;
-            let preset = serde_json::from_slice(value.value()).map_err(|e| e.to_string())?;
+            let preset: serde_json::Value =
+                serde_json::from_slice(value.value()).map_err(|e| e.to_string())?;
+
+            let record_type = preset
+                .get("recordType")
+                .and_then(|v| v.as_str())
+                .unwrap_or("specimen")
+                .to_string();
+
+            let description = preset
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
             presets.push(TemplatePresetEntry {
                 name: key.value().to_string(),
+                record_type,
+                description,
                 value: preset,
             });
         }

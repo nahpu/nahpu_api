@@ -89,8 +89,18 @@ pub struct ConfigPresetEntry {
 pub struct TemplatePresetEntry {
     /// Name of the template preset.
     pub name: String,
+    /// Record type of the template preset.
+    #[serde(rename = "recordType", default = "default_record_type")]
+    pub record_type: String,
+    /// Description of the template preset.
+    #[serde(default)]
+    pub description: String,
     /// Template configuration JSON blob.
     pub value: serde_json::Value,
+}
+
+fn default_record_type() -> String {
+    "specimen".to_string()
 }
 
 /// Represents a layout block within a document.
