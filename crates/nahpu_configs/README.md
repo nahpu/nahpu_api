@@ -4,6 +4,25 @@ A utility crate for managing user configuration and document presets for NAHPU (
 
 It provides data models, a `redb` storage layer, and utility functions for exporting and importing preferences in JSON and JSON Lines formats.
 
+## Role in NAHPU
+
+NAHPU uses `nahpu_configs` for user configuration that affects reproducible
+outputs but does not belong in the project SQLite database. The crate stores
+these values in `redb` tables for user configs, record export presets, template
+presets, and document layouts.
+
+This is distinct from:
+
+- **SQLite project data**, which remains in the Flutter app's Drift database and
+  contains the canonical specimen, site, collecting event, personnel, taxonomy,
+  media metadata, and narrative records.
+- **SharedPreferences app settings**, which stay in Flutter for local UI or app
+  state that is not required for reproducibility.
+
+Because `nahpu_configs` stores reproducibility-related user choices, its data can
+be exported/imported with project archives so another NAHPU installation can use
+the same option lists, formatting choices, presets, and document layouts.
+
 ## Example Usage
 
 ### Initializing the Config Database
