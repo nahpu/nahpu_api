@@ -164,6 +164,7 @@ mod tests {
                 page_break_after: false,
             }],
             fill_page: false,
+            multi_block_mode: "Continuous".to_string(),
         }];
 
         let export = UserConfigsExport {

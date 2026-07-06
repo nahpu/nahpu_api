@@ -532,6 +532,7 @@ mod tests {
             page_pad_bottom_mm: 8.0,
             blocks: vec![block],
             fill_page: false,
+            multi_block_mode: "Continuous".to_string(),
         };
 
         // Insert

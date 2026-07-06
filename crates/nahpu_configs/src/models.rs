@@ -124,6 +124,10 @@ pub struct DocumentLayoutBlock {
     pub page_break_after: bool,
 }
 
+fn default_multi_block_mode() -> String {
+    "Continuous".to_string()
+}
+
 /// Represents the overall configuration for document layouts.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DocumentLayoutPreset {
@@ -149,6 +153,8 @@ pub struct DocumentLayoutPreset {
     pub blocks: Vec<DocumentLayoutBlock>,
     #[serde(alias = "fillPage", default)]
     pub fill_page: bool,
+    #[serde(alias = "multiBlockMode", default = "default_multi_block_mode")]
+    pub multi_block_mode: String,
 }
 
 /// Represents whether a stored document layout can be read by the current schema.
