@@ -157,7 +157,8 @@ impl DocumentExport {
     }
 }
 
-fn markdown_to_typst(md_text: &str) -> String {
+/// Converts Markdown text into Typst markup.
+pub fn markdown_to_typst(md_text: &str) -> String {
     use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 
     let parser = Parser::new(md_text);
@@ -244,3 +245,24 @@ fn escape_typst(text: &str) -> String {
     }
     escaped
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_markdown_to_typst() {
+        let md = "Some **bold** and *italic* text.\n\n- Item 1\n- Item 2\n\n1. Numbered 1\n2. Numbered 2";
+        let typst = markdown_to_typst(md);
+        println!("Generated Typst:\n{}", typst);
+    }
+
+    #[test]
+    fn test_pdf_compilation() {
+        let md = "Some **bold** and *italic* text.\n\n- Item 1\n- Item 2\n\n1. Numbered 1\n2. Numbered 2";
+        let typst = markdown_to_typst(md);
+        let pdf_res = crate::typst_compiler::compile_to_pdf(&typst, vec![]);
+        assert!(pdf_res.is_ok(), "Failed to compile: {:?}", pdf_res.err());
+    }
+}
+
