@@ -163,6 +163,7 @@ mod tests {
                 template_pad_bottom_mm: 1.0,
                 page_break_after: false,
             }],
+            fill_page: false,
         }];
 
         let export = UserConfigsExport {

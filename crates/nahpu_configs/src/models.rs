@@ -147,6 +147,8 @@ pub struct DocumentLayoutPreset {
     #[serde(alias = "pagePadBottomMm")]
     pub page_pad_bottom_mm: f64,
     pub blocks: Vec<DocumentLayoutBlock>,
+    #[serde(alias = "fillPage", default)]
+    pub fill_page: bool,
 }
 
 /// Represents whether a stored document layout can be read by the current schema.

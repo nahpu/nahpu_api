@@ -531,6 +531,7 @@ mod tests {
             page_pad_right_mm: 8.0,
             page_pad_bottom_mm: 8.0,
             blocks: vec![block],
+            fill_page: false,
         };
 
         // Insert
