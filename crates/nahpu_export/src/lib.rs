@@ -9,4 +9,5 @@ pub mod models;
 pub mod typst_compiler;
 
 pub use document::DocumentExport;
+pub use document::markdown_to_typst;
 pub use models::*;
