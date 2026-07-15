@@ -6,8 +6,8 @@ use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, World};
 
-/// Represents a simple Typst environment needed to compile a single document.
-/// It contains a virtual file system and a font book.
+/// Represents a Typst environment needed to compile a single document.
+/// It contains a virtual file system to allow document previews and a font book.
 pub struct SimpleWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
@@ -107,12 +107,10 @@ impl World for SimpleWorld {
 pub fn compile_to_pdf(source: &str, fonts_bytes: Vec<Vec<u8>>) -> Result<Vec<u8>, String> {
     let world = SimpleWorld::new(source.to_string(), fonts_bytes);
 
-    // Compile the document
     let document = typst::compile(&world)
         .output
         .map_err(|err| format!("Compilation error: {:?}", err))?;
 
-    // Export to PDF
     let pdf_bytes = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default())
         .map_err(|err| format!("PDF generation error: {:?}", err))?;
 
