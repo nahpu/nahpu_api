@@ -392,4 +392,3 @@ mod tests {
         assert!(pdf_res.is_ok(), "Failed to compile: {:?}", pdf_res.err());
     }
 }
-
