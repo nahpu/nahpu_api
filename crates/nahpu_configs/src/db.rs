@@ -5,7 +5,7 @@
 
 use crate::models::{
     ConfigExportPreset, ConfigPresetEntry, DocumentLayoutPreset, DocumentLayoutStatus,
-    TemplatePresetEntry,
+    TemplatePresetDeletionResult, TemplatePresetEntry, TemplatePresetUsage,
 };
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use std::sync::OnceLock;
@@ -238,6 +238,150 @@ impl ConfigDb {
         }
         write_txn.commit().map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    /// Lists each print layout and block that references a template preset.
+    ///
+    /// Layouts that cannot be read by the current schema cause this method to
+    /// fail rather than risk reporting an incomplete dependency list.
+    pub fn get_template_preset_usages(
+        &self,
+        name: &str,
+    ) -> Result<Vec<TemplatePresetUsage>, String> {
+        let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
+        let table = read_txn
+            .open_table(DOCUMENT_LAYOUTS)
+            .map_err(|e| e.to_string())?;
+        let mut usages = Vec::new();
+
+        for entry in table.iter().map_err(|e| e.to_string())? {
+            let (key, value) = entry.map_err(|e| e.to_string())?;
+            let layout: DocumentLayoutPreset =
+                serde_json::from_slice(value.value()).map_err(|e| e.to_string())?;
+            let block_indices = layout
+                .blocks
+                .iter()
+                .enumerate()
+                .filter_map(|(index, block)| (block.template_name == name).then_some(index as i32))
+                .collect::<Vec<_>>();
+
+            if !block_indices.is_empty() {
+                usages.push(TemplatePresetUsage {
+                    layout_name: key.value().to_string(),
+                    block_indices,
+                });
+            }
+        }
+
+        Ok(usages)
+    }
+
+    /// Replaces every reference to a template preset and deletes it atomically.
+    ///
+    /// A referenced template requires a replacement with the same record type.
+    /// The operation is performed in one redb write transaction, so a failure
+    /// leaves both layouts and templates unchanged.
+    pub fn delete_template_preset_with_replacement(
+        &self,
+        name: &str,
+        replacement_name: Option<&str>,
+    ) -> Result<TemplatePresetDeletionResult, String> {
+        if replacement_name == Some(name) {
+            return Err("A template cannot replace itself".to_string());
+        }
+
+        let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
+        let (target_record_type, replacement_record_type) = {
+            let table = write_txn
+                .open_table(TEMPLATE_PRESETS)
+                .map_err(|e| e.to_string())?;
+            let target = table
+                .get(name)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("Template preset '{name}' not found"))?;
+            let target_value: serde_json::Value =
+                serde_json::from_slice(target.value()).map_err(|e| e.to_string())?;
+            let target_record_type = template_record_type(&target_value);
+
+            let replacement_record_type = if let Some(replacement_name) = replacement_name {
+                let replacement = table
+                    .get(replacement_name)
+                    .map_err(|e| e.to_string())?
+                    .ok_or_else(|| {
+                        format!("Replacement template preset '{replacement_name}' not found")
+                    })?;
+                let replacement_value: serde_json::Value =
+                    serde_json::from_slice(replacement.value()).map_err(|e| e.to_string())?;
+                Some(template_record_type(&replacement_value))
+            } else {
+                None
+            };
+
+            (target_record_type, replacement_record_type)
+        };
+
+        if replacement_record_type
+            .as_ref()
+            .is_some_and(|record_type| record_type != &target_record_type)
+        {
+            return Err("The replacement template must use the same record type".to_string());
+        }
+
+        let mut updated_layout_count = 0;
+        let mut updated_block_count = 0;
+        {
+            let mut table = write_txn
+                .open_table(DOCUMENT_LAYOUTS)
+                .map_err(|e| e.to_string())?;
+            let layouts = table
+                .iter()
+                .map_err(|e| e.to_string())?
+                .map(|entry| {
+                    let (key, value) = entry.map_err(|e| e.to_string())?;
+                    let layout: DocumentLayoutPreset =
+                        serde_json::from_slice(value.value()).map_err(|e| e.to_string())?;
+                    Ok::<_, String>((key.value().to_string(), layout))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            for (layout_name, mut layout) in layouts {
+                let mut replacements = 0;
+                for block in &mut layout.blocks {
+                    if block.template_name == name {
+                        let replacement_name = replacement_name.ok_or_else(|| {
+                            format!(
+                                "Template preset '{name}' is used by print layout '{}'",
+                                layout_name
+                            )
+                        })?;
+                        block.template_name = replacement_name.to_string();
+                        replacements += 1;
+                    }
+                }
+
+                if replacements > 0 {
+                    let bytes = serde_json::to_vec(&layout).map_err(|e| e.to_string())?;
+                    table
+                        .insert(layout_name.as_str(), bytes.as_slice())
+                        .map_err(|e| e.to_string())?;
+                    updated_layout_count += 1;
+                    updated_block_count += replacements;
+                }
+            }
+        }
+
+        {
+            let mut table = write_txn
+                .open_table(TEMPLATE_PRESETS)
+                .map_err(|e| e.to_string())?;
+            table.remove(name).map_err(|e| e.to_string())?;
+        }
+        write_txn.commit().map_err(|e| e.to_string())?;
+
+        Ok(TemplatePresetDeletionResult {
+            updated_layout_count,
+            updated_block_count,
+        })
     }
 
     /// Retrieves all template presets from the database.
@@ -487,13 +631,25 @@ impl ConfigDb {
     }
 }
 
+fn template_record_type(template: &serde_json::Value) -> String {
+    template
+        .get("recordType")
+        .and_then(|value| value.as_str())
+        .unwrap_or("specimen")
+        .to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::{DocumentLayoutBlock, DocumentLayoutPreset};
+    use std::sync::Mutex;
+
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_document_layout_crud() {
+        let _guard = TEST_LOCK.lock().unwrap();
         let mut db_path = std::env::temp_dir();
         db_path.push(format!(
             "test_config_{}.redb",
@@ -558,7 +714,99 @@ mod tests {
     }
 
     #[test]
+    fn test_template_deletion_replaces_all_layout_references() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        if ConfigDb::get_instance().is_err() {
+            let mut db_path = std::env::temp_dir();
+            db_path.push(format!(
+                "test_template_delete_{}.redb",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            ConfigDb::init(db_path.to_str().unwrap()).unwrap();
+        }
+        let db = ConfigDb::get_instance().unwrap();
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let target_name = format!("target_template_{suffix}");
+        let replacement_name = format!("replacement_template_{suffix}");
+        let layout_name = format!("template_usage_layout_{suffix}");
+        let target = serde_json::json!({ "recordType": "specimen" });
+        let replacement = serde_json::json!({ "recordType": "specimen" });
+
+        db.set_template_preset(&target_name, &target).unwrap();
+        db.set_template_preset(&replacement_name, &replacement)
+            .unwrap();
+        let layout = DocumentLayoutPreset {
+            name: layout_name.clone(),
+            layout_type: "WholePage".to_string(),
+            page_size_key: "Letter".to_string(),
+            page_orientation: "portrait".to_string(),
+            custom_page_width_mm: None,
+            custom_page_height_mm: None,
+            page_pad_top_mm: 8.0,
+            page_pad_left_mm: 8.0,
+            page_pad_right_mm: 8.0,
+            page_pad_bottom_mm: 8.0,
+            blocks: vec![
+                DocumentLayoutBlock {
+                    template_name: target_name.clone(),
+                    template_count: 1,
+                    rows: 1,
+                    cols: 1,
+                    template_pad_top_mm: 0.0,
+                    template_pad_left_mm: 0.0,
+                    template_pad_right_mm: 0.0,
+                    template_pad_bottom_mm: 0.0,
+                    page_break_after: false,
+                },
+                DocumentLayoutBlock {
+                    template_name: target_name.clone(),
+                    template_count: 1,
+                    rows: 1,
+                    cols: 1,
+                    template_pad_top_mm: 0.0,
+                    template_pad_left_mm: 0.0,
+                    template_pad_right_mm: 0.0,
+                    template_pad_bottom_mm: 0.0,
+                    page_break_after: false,
+                },
+            ],
+            fill_page: false,
+            multi_block_mode: "Continuous".to_string(),
+        };
+        db.set_document_layout(&layout_name, &layout).unwrap();
+
+        let usages = db.get_template_preset_usages(&target_name).unwrap();
+        assert_eq!(usages.len(), 1);
+        assert_eq!(usages[0].block_indices, vec![0, 1]);
+
+        let result = db
+            .delete_template_preset_with_replacement(&target_name, Some(&replacement_name))
+            .unwrap();
+        assert_eq!(result.updated_layout_count, 1);
+        assert_eq!(result.updated_block_count, 2);
+        assert!(db.get_template_preset(&target_name).unwrap().is_none());
+
+        let saved_layout = db.get_document_layout(&layout_name).unwrap().unwrap();
+        assert!(
+            saved_layout
+                .blocks
+                .iter()
+                .all(|block| block.template_name == replacement_name)
+        );
+
+        db.delete_document_layout(&layout_name).unwrap();
+        db.delete_template_preset(&replacement_name).unwrap();
+    }
+
+    #[test]
     fn test_document_layout_statuses_include_invalid_layouts() {
+        let _guard = TEST_LOCK.lock().unwrap();
         let mut db_path = std::env::temp_dir();
         db_path.push(format!(
             "test_config_status_{}.redb",

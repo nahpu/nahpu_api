@@ -99,6 +99,24 @@ pub struct TemplatePresetEntry {
     pub value: serde_json::Value,
 }
 
+/// Identifies layout blocks that use a template preset.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct TemplatePresetUsage {
+    /// Name of the print layout that contains the references.
+    pub layout_name: String,
+    /// Zero-based indexes of the blocks that reference the template.
+    pub block_indices: Vec<i32>,
+}
+
+/// Summarizes an atomic template replacement and deletion.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct TemplatePresetDeletionResult {
+    /// Number of layouts whose blocks were updated.
+    pub updated_layout_count: i32,
+    /// Number of template block references that were updated.
+    pub updated_block_count: i32,
+}
+
 fn default_record_type() -> String {
     "specimen".to_string()
 }

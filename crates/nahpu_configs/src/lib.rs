@@ -10,5 +10,6 @@ pub mod models;
 pub use db::ConfigDb;
 pub use models::{
     ConfigCombinedField, ConfigExportPreset, ConfigPresetEntry, DocumentLayoutBlock,
-    DocumentLayoutPreset, DocumentLayoutStatus, TemplatePresetEntry, UserConfigsExport,
+    DocumentLayoutPreset, DocumentLayoutStatus, TemplatePresetDeletionResult, TemplatePresetEntry,
+    TemplatePresetUsage, UserConfigsExport,
 };
