@@ -149,7 +149,7 @@ mod tests {
 
         let csv_content = std::fs::read_to_string(&csv_path).unwrap();
         // Check that DWC terms were used as headers (order from serde_json might vary)
-        assert!(csv_content.contains("dwc:locationID"));
+        assert!(csv_content.contains("dwc:siteNumber"));
         assert!(csv_content.contains("dwc:country"));
         assert!(csv_content.contains("S1"));
         assert!(csv_content.contains("USA"));
@@ -170,7 +170,7 @@ mod tests {
             .unwrap();
         let field_names: Vec<&str> = fields.iter().map(|f| f["name"].as_str().unwrap()).collect();
 
-        assert!(field_names.contains(&"dwc:locationID"));
+        assert!(field_names.contains(&"dwc:siteNumber"));
         assert!(field_names.contains(&"dwc:country"));
     }
 }

@@ -101,11 +101,11 @@ mod tests {
 
         // Check Record 1
         assert!(xml.contains("<dwr:SimpleDarwinRecord>"));
-        assert!(xml.contains("<dwc:locationID>S1</dwc:locationID>"));
+        assert!(xml.contains("<dwc:siteNumber>S1</dwc:siteNumber>"));
         assert!(xml.contains("<dwc:country>USA</dwc:country>"));
 
         // Check Record 2 & escaping
-        assert!(xml.contains("<dwc:locationID>S2</dwc:locationID>"));
+        assert!(xml.contains("<dwc:siteNumber>S2</dwc:siteNumber>"));
         // quick-xml encodes '&' as '&amp;'
         assert!(xml.contains("<dwc:country>Canada &amp; More</dwc:country>"));
 

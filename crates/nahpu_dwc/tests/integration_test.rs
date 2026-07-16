@@ -17,6 +17,6 @@ fn test_site_dwc_conversion() {
     };
 
     let result = convert_to_dwc_json("site", &site).unwrap();
-    assert_eq!(result["dwc:locationID"], json!("S1"));
+    assert_eq!(result["dwc:siteNumber"], json!("S1"));
     assert_eq!(result["dwc:country"], json!("USA"));
 }

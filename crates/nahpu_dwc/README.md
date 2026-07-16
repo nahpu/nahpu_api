@@ -99,9 +99,7 @@ The following table summarizes how Nahpu database fields map to official Darwin 
 |---|---|---|
 | **Project** | `uuid` | `dcterms:identifier` |
 | | `name` | `dwc:datasetName` |
-| | `description` | `dwc:datasetDescription` |
 | | `principalInvestigator` | `dwc:recordedBy` |
-| | `location` | `dwc:location` |
 | | `startDate`, `endDate` | `dwc:eventDate` |
 | | `created` | `dcterms:created` |
 | | `lastAccessed` | `dcterms:modified` |
@@ -146,7 +144,6 @@ The following table summarizes how Nahpu database fields map to official Darwin 
 | | `authors` | `dwc:scientificNameAuthorship` |
 | | `commonName` | `dwc:vernacularName` |
 | | `notes` | `dwc:taxonRemarks` |
-| | `citesStatus`, `redListCategory`, `countryStatus` | `dwc:threatStatus` |
 | **Specimen** | `uuid` | `dwc:occurrenceID` |
 | | `projectUuid` | `dwc:datasetID` |
 | | `speciesId` | `dwc:taxonID` |
