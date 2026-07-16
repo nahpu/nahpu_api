@@ -10,6 +10,75 @@ pub struct RecordExporter {
     columns: Vec<String>,
 }
 
+/// Positional tabular exporter for formats whose visible headers may repeat.
+///
+/// Darwin Core MeasurementOrFact groups intentionally repeat the same three
+/// headers. JSON objects and map-based rows cannot retain those duplicates, so
+/// this exporter writes rows by column position instead of by key.
+pub struct TabularRecordExporter {
+    headers: Vec<String>,
+    rows: Vec<Vec<String>>,
+}
+
+impl TabularRecordExporter {
+    pub fn new(headers: Vec<String>, rows: Vec<Vec<String>>) -> Result<Self, String> {
+        for (index, row) in rows.iter().enumerate() {
+            if row.len() != headers.len() {
+                return Err(format!(
+                    "Tabular row {} has {} cells but {} headers were supplied",
+                    index,
+                    row.len(),
+                    headers.len()
+                ));
+            }
+        }
+        Ok(Self { headers, rows })
+    }
+
+    pub fn export_csv(&self, path: &Path) -> Result<(), String> {
+        self.write_delimited(path, b',')
+    }
+
+    pub fn export_tsv(&self, path: &Path) -> Result<(), String> {
+        self.write_delimited(path, b'\t')
+    }
+
+    pub fn export_excel(&self, path: &Path) -> Result<(), String> {
+        let mut workbook = Workbook::new();
+        let worksheet = workbook.add_worksheet();
+
+        for (column_index, header) in self.headers.iter().enumerate() {
+            worksheet
+                .write_string(0, column_index as u16, header)
+                .map_err(|error| error.to_string())?;
+        }
+        for (row_index, row) in self.rows.iter().enumerate() {
+            for (column_index, value) in row.iter().enumerate() {
+                worksheet
+                    .write_string(row_index as u32 + 1, column_index as u16, value)
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+        workbook.save(path).map_err(|error| error.to_string())
+    }
+
+    fn write_delimited(&self, path: &Path, delimiter: u8) -> Result<(), String> {
+        let mut writer = WriterBuilder::new()
+            .delimiter(delimiter)
+            .from_path(path)
+            .map_err(|error| error.to_string())?;
+        writer
+            .write_record(&self.headers)
+            .map_err(|error| error.to_string())?;
+        for row in &self.rows {
+            writer
+                .write_record(row)
+                .map_err(|error| error.to_string())?;
+        }
+        writer.flush().map_err(|error| error.to_string())
+    }
+}
+
 impl RecordExporter {
     pub fn new(data: &[Value], columns: &[String], concatenate_multi_entries: bool) -> Self {
         if concatenate_multi_entries {
