@@ -8,7 +8,11 @@
 
 pub mod dwc;
 pub mod export;
+pub mod package;
 pub mod types;
+
+/// Version of the compiled `nahpu_dwc` crate.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(test)]
 mod tests {

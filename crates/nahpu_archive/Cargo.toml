@@ -1,12 +1,12 @@
 [package]
 name = "nahpu_archive"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Heru Handika <herubiolog@gmail.com>"]
-description = "A utility crate for archiving and extracting Nahpu project data."
+description = "Archive utilities for ZIP, gzip, and tar.gz files used by NAHPU."
 repository = "https://github.com/hhandika/nahpu_api"
 license = "MIT"
-keywords = ["nahpu", "archive", "zip"]
+keywords = ["nahpu", "archive", "zip", "gzip", "tar"]
 categories = ["compression"]
 readme = "README.md"
 homepage = "https://www.nahpu.app/"
@@ -15,6 +15,7 @@ homepage = "https://www.nahpu.app/"
 
 [dependencies]
 flate2 = "1.1.*"
+tar = "0.4"
 zip = "8.6.*"
 
 [dev-dependencies]

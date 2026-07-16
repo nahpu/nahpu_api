@@ -31,6 +31,7 @@ jobs:
             nahpu_archive
             nahpu_db
             nahpu_configs
+            nahpu_dp
             nahpu_gis
             nahpu_export
             nahpu_dwc

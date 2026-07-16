@@ -153,7 +153,7 @@ impl RecordExporter {
                                                 format!("{}{}{}", table_prefix, camel_key, idx);
                                             col_dynamic_keys
                                                 .entry(col.clone())
-                                                .or_insert_with(BTreeSet::new)
+                                                .or_default()
                                                 .insert(dyn_col_name.clone());
                                             new_row.insert(
                                                 dyn_col_name,

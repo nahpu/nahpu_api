@@ -29,42 +29,21 @@ fn main() {
 }
 ```
 
-### Darwin Core Data Package (DwC-DP) Export
+### Darwin Core specimen bundles
 
-You can seamlessly export entire collections of structs into a standard Darwin Core Data Package (which conforms to the Frictionless Data Package specification) by using `DataPackageBuilder`.
+`package` creates the two NAHPU bundle formats from a JSON specimen snapshot:
 
-```rust
-use nahpu_dwc::export::dp::DataPackageBuilder;
-use serde::Serialize;
-use std::path::Path;
+- `DarwinCoreArchive` writes an occurrence-core DwC-A ZIP with `meta.xml`,
+  `eml.xml`, optional extensions, and bundled media.
+- `DarwinCoreDataPackage` writes a relational DwC Data Package as either
+  tar.gz or ZIP. The archive contains `datapackage.json`, inline resource
+  schemas, primary/foreign keys, EML, and available media at archive root.
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct DummySite {
-    site_id: String,
-    country: String,
-}
+TAR.GZ is the default DwC-DP container. ZIP is available as a compatibility
+option and is reported in the returned manifest.
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let sites = vec![
-        DummySite { site_id: "S1".to_string(), country: "USA".to_string() },
-        DummySite { site_id: "S2".to_string(), country: "Canada".to_string() },
-    ];
-
-    let output_dir = Path::new("./export_output");
-    std::fs::create_dir_all(&output_dir)?;
-
-    let mut builder = DataPackageBuilder::new("nahpu_dp");
-    
-    // Serializes the structs into `site.csv` and auto-generates DwC headers
-    builder.add_resource("site", &sites, &output_dir)?;
-    
-    // Emits the frictioneless `datapackage.json` connecting the resources
-    builder.build(&output_dir)?;
-    
-    Ok(())
-}
-```
+The package writer removes optional columns with no values and returns the same
+deterministic manifest used by the NAHPU Bundle Project screen.
 
 ### Simple Darwin Core XML Export
 

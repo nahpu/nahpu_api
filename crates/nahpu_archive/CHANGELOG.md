@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0
+
+- Add safe multi-file tar.gz creation and extraction.
+- Retain ZIP and single-file gzip APIs.
+
 All notable changes to `nahpu_archive` will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

@@ -92,6 +92,7 @@ pub fn parse_json_lines_to_export(content: &str) -> Result<UserConfigsExport, St
     }
 
     Ok(UserConfigsExport {
+        schema_version: crate::USER_CONFIG_SCHEMA_VERSION,
         configs,
         record_export_presets,
         template_presets,
@@ -168,6 +169,7 @@ mod tests {
         }];
 
         let export = UserConfigsExport {
+            schema_version: crate::USER_CONFIG_SCHEMA_VERSION,
             configs,
             record_export_presets,
             template_presets,

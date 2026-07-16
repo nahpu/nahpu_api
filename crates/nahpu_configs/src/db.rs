@@ -508,6 +508,7 @@ impl ConfigDb {
         let template_presets = self.get_all_template_presets()?;
         let document_layouts = self.get_all_document_layouts()?;
         Ok(crate::models::UserConfigsExport {
+            schema_version: crate::USER_CONFIG_SCHEMA_VERSION,
             configs,
             record_export_presets,
             template_presets,

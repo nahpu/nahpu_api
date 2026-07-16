@@ -189,6 +189,9 @@ pub struct DocumentLayoutStatus {
 /// Represents a complete bundle of user configurations and presets for export.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserConfigsExport {
+    /// Version of the serialized user configuration contract.
+    #[serde(default)]
+    pub schema_version: u32,
     /// Map of configuration keys to their values.
     pub configs: HashMap<String, serde_json::Value>,
     /// List of record export presets.

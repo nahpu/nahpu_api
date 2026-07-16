@@ -262,7 +262,11 @@ pub fn markdown_to_typst(md_text: &str) -> String {
                     };
                     align_strs.push(s);
                 }
-                out.push_str(&format!("#table(\n  columns: {},\n  align: ({}),\n", alignments.len(), align_strs.join(", ")));
+                out.push_str(&format!(
+                    "#table(\n  columns: {},\n  align: ({}),\n",
+                    alignments.len(),
+                    align_strs.join(", ")
+                ));
             }
             Event::End(TagEnd::Table) => {
                 out.push_str(")\n\n");
@@ -273,7 +277,10 @@ pub fn markdown_to_typst(md_text: &str) -> String {
             Event::End(TagEnd::TableCell) => {
                 out.push_str("],\n");
             }
-            Event::Start(Tag::TableHead) | Event::End(TagEnd::TableHead) | Event::Start(Tag::TableRow) | Event::End(TagEnd::TableRow) => {}
+            Event::Start(Tag::TableHead)
+            | Event::End(TagEnd::TableHead)
+            | Event::Start(Tag::TableRow)
+            | Event::End(TagEnd::TableRow) => {}
             Event::Start(Tag::Strong) => out.push('*'),
             Event::End(TagEnd::Strong) => out.push('*'),
             Event::Start(Tag::Emphasis) => out.push('_'),

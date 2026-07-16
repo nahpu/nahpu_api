@@ -10,19 +10,22 @@
 //! 3. Map SQL types to Rust types, handling nullability.
 //! 4. Generate Rust structs with Serde support for each table.
 //! 5. Write the generated code to the build output directory.
+use std::env;
+use std::fs::{self, File};
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
+
 use heck::{ToPascalCase, ToSnakeCase};
 use reqwest::blocking::get;
 use sqlparser::ast::{ColumnOption, DataType, Statement};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::path::Path;
 
 const NAHPU_TABLES_URL: &str =
     "https://raw.githubusercontent.com/nahpu/nahpu/main/lib/services/database/tables.drift";
 
 const GENERATED_FILE: &str = "nahpu_sqlite.rs";
+const LOCAL_SCHEMA_PATH: &str = "../../../../Flutter/nahpu/lib/services/database/tables.drift";
 
 /// Maps SQL data types from the .drift file to corresponding Rust types.
 ///
@@ -89,8 +92,6 @@ fn clean_drift_content(content: &str) -> String {
         .map(|stmt| format!("{};", stmt.trim())) // Add the semicolon back and ensure it's clean
         .collect()
 }
-
-use std::env;
 
 fn write_rust_file(content: &str) {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR environment variable is not set");
@@ -167,15 +168,28 @@ fn main() {
         "https://raw.githubusercontent.com/nahpu/nahpu/main/lib/services/database/tables.drift";
     println!("cargo:rerun-if-changed=build.rs"); // Re-run if build script itself changes.
     println!("Fetching drift file from: {}", drift_file_url);
-    // Fetch the drift file content from the URL.
+    println!("cargo:rerun-if-env-changed=NAHPU_DRIFT_SCHEMA");
+    let local_schema = env::var("NAHPU_DRIFT_SCHEMA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join(LOCAL_SCHEMA_PATH));
+    println!("cargo:rerun-if-changed={}", local_schema.display());
+
+    // Prefer the canonical online schema, but keep local NAHPU builds reproducible
+    // when the network is unavailable.
     let drift_content = match get(drift_file_url) {
         Ok(response) => response.text().expect("Failed to read response text"),
         Err(e) => {
             println!(
-                "cargo:warning=Failed to fetch drift file: {}. Skipping generation.",
-                e
+                "cargo:warning=Failed to fetch drift file: {}. Using local schema fallback.",
+                e,
             );
-            return;
+            fs::read_to_string(&local_schema).unwrap_or_else(|local_error| {
+                panic!(
+                    "Failed to read local Drift schema at {}: {}",
+                    local_schema.display(),
+                    local_error
+                )
+            })
         }
     };
 

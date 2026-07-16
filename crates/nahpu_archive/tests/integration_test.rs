@@ -1,4 +1,6 @@
 use nahpu_archive::archive::{ZipArchive, ZipExtractor};
+use nahpu_archive::gzip;
+use nahpu_archive::tar_gzip::{TarGzipArchive, TarGzipExtractor};
 use std::fs;
 
 #[test]
@@ -47,4 +49,53 @@ fn test_archive_and_extract() {
 
     assert_eq!(content1, "Hello, file 1!");
     assert_eq!(content2, "Hello, file 2!");
+}
+
+#[test]
+fn gzip_round_trip() {
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let input = temp_dir.path().join("input.csv");
+    let compressed = temp_dir.path().join("input.csv.gz");
+    let extracted = temp_dir.path().join("output.csv");
+    fs::write(
+        &input,
+        "occurrenceID,basisOfRecord\nocc-1,PreservedSpecimen\n",
+    )
+    .expect("Failed to write input");
+
+    gzip::compress(&input, &compressed).expect("Failed to gzip input");
+    gzip::decompress(&compressed, &extracted).expect("Failed to gunzip input");
+
+    assert_eq!(fs::read(&input).unwrap(), fs::read(&extracted).unwrap());
+}
+
+#[test]
+fn tar_gzip_round_trip() {
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let input_dir = temp_dir.path().join("input");
+    let nested_dir = input_dir.join("nested");
+    fs::create_dir_all(&nested_dir).expect("Failed to create input");
+    let first = input_dir.join("datapackage.json");
+    let second = nested_dir.join("records.csv");
+    fs::write(&first, "{}").expect("Failed to write descriptor");
+    fs::write(&second, "id\n1\n").expect("Failed to write data");
+
+    let archive_path = temp_dir.path().join("package.tar.gz");
+    TarGzipArchive::new(&input_dir, &archive_path, &[first.clone(), second.clone()])
+        .write()
+        .expect("Failed to create tar.gz");
+
+    let output_dir = temp_dir.path().join("output");
+    TarGzipExtractor::new(&archive_path, &output_dir)
+        .extract()
+        .expect("Failed to extract tar.gz");
+
+    assert_eq!(
+        fs::read_to_string(output_dir.join("datapackage.json")).unwrap(),
+        "{}"
+    );
+    assert_eq!(
+        fs::read_to_string(output_dir.join("nested/records.csv")).unwrap(),
+        "id\n1\n"
+    );
 }

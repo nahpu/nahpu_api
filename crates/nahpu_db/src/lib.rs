@@ -1,6 +1,9 @@
 pub mod io;
 pub mod types;
 
+/// Version of the compiled `nahpu_db` crate.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[cfg(test)]
 mod tests {
     use super::types::nahpu_sqlite::*;

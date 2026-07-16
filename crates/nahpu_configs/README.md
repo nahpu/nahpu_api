@@ -4,6 +4,10 @@ A utility crate for managing user configuration and document presets for NAHPU (
 
 It provides data models, a `redb` storage layer, and utility functions for exporting and importing preferences in JSON and JSON Lines formats.
 
+Configuration exports include a `schema_version`. Version `1` covers user
+configuration values, record export presets, template presets, and document
+layouts. Missing versions are treated as legacy input during deserialization.
+
 ## Role in NAHPU
 
 NAHPU uses `nahpu_configs` for user configuration that affects reproducible

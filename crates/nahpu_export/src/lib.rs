@@ -8,6 +8,8 @@ pub mod models;
 /// Provides the integration with the Typst compiler to render `.typ` code into `.pdf` binaries.
 pub mod typst_compiler;
 
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub use document::DocumentExport;
 pub use document::markdown_to_typst;
 pub use models::*;
