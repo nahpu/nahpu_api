@@ -8,6 +8,7 @@ pub mod models;
 /// Provides the integration with the Typst compiler to render `.typ` code into `.pdf` binaries.
 pub mod typst_compiler;
 
+/// The current version of the `nahpu_export` crate, derived from the Cargo package version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use document::DocumentExport;
