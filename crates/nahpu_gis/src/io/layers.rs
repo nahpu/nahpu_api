@@ -53,7 +53,7 @@ pub fn convert_vector_to_geojson(
     })
 }
 
-fn read_geojson(path: &Path) -> Result<FeatureCollection, String> {
+pub(crate) fn read_geojson(path: &Path) -> Result<FeatureCollection, String> {
     let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
     match content
         .parse::<GeoJson>()
@@ -76,7 +76,7 @@ fn read_geojson(path: &Path) -> Result<FeatureCollection, String> {
     }
 }
 
-fn read_zipped_shapefile(path: &Path) -> Result<FeatureCollection, String> {
+pub(crate) fn read_zipped_shapefile(path: &Path) -> Result<FeatureCollection, String> {
     let directory = tempdir().map_err(|error| error.to_string())?;
     ZipExtractor::new(path, directory.path())
         .extract()

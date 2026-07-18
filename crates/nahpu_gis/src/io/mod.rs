@@ -1,3 +1,4 @@
+pub mod coordinates;
 pub mod geojson;
 pub mod kml;
 pub mod layers;
