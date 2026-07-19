@@ -6,16 +6,16 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-pub struct GeoJsonExporter<'a> {
+pub(crate) struct GeoJsonExporter<'a> {
     data: &'a [CoordinateData],
 }
 
 impl<'a> GeoJsonExporter<'a> {
-    pub fn new(data: &'a [CoordinateData]) -> Self {
+    pub(crate) fn new(data: &'a [CoordinateData]) -> Self {
         Self { data }
     }
 
-    pub fn to_feature_collection(&self) -> FeatureCollection {
+    fn to_feature_collection(&self) -> FeatureCollection {
         let mut features = Vec::new();
 
         for coord in self.data {
@@ -62,7 +62,7 @@ impl<'a> GeoJsonExporter<'a> {
         }
     }
 
-    pub fn export_geojson(&self, path: &Path) -> Result<(), String> {
+    pub(crate) fn export(&self, path: &Path) -> Result<(), String> {
         let feature_collection = self.to_feature_collection();
         let json_string = feature_collection.to_string();
 
@@ -101,15 +101,17 @@ mod tests {
         let exporter = GeoJsonExporter::new(&data);
 
         let path = Path::new("test_output.geojson");
-        exporter.export_geojson(path).unwrap();
+        exporter
+            .export(path)
+            .expect("GeoJSON export should succeed");
 
         assert!(path.exists());
-        let content = fs::read_to_string(path).unwrap();
+        let content = fs::read_to_string(path).expect("GeoJSON should be readable");
         assert!(content.contains("Site 1"));
         assert!(content.contains("Test note"));
         assert!(content.contains("[10.0,20.0,100.0]"));
         assert!(content.contains("[-10.0,-20.0]"));
 
-        fs::remove_file(path).unwrap();
+        fs::remove_file(path).expect("test output should be removable");
     }
 }

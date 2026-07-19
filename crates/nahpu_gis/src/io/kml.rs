@@ -8,16 +8,16 @@ use kml::{
 use std::fs::File;
 use std::path::Path;
 
-pub struct KmlExporter<'a> {
+pub(crate) struct KmlExporter<'a> {
     data: &'a [CoordinateData],
 }
 
 impl<'a> KmlExporter<'a> {
-    pub fn new(data: &'a [CoordinateData]) -> Self {
+    pub(crate) fn new(data: &'a [CoordinateData]) -> Self {
         Self { data }
     }
 
-    pub fn export_kml(&self, path: &Path) -> Result<(), String> {
+    pub(crate) fn export(&self, path: &Path) -> Result<(), String> {
         let mut elements = vec![];
 
         let style = Style {
@@ -112,10 +112,10 @@ mod tests {
         let exporter = KmlExporter::new(&data);
 
         let path = Path::new("test_output.kml");
-        exporter.export_kml(path).unwrap();
+        exporter.export(path).expect("KML export should succeed");
 
         assert!(path.exists());
-        let content = fs::read_to_string(path).unwrap();
+        let content = fs::read_to_string(path).expect("KML should be readable");
         assert!(content.contains("<name>Site 1</name>"));
         assert!(content.contains("<description>Test note</description>"));
         assert!(content.contains("<coordinates>10,20,100</coordinates>"));
@@ -124,6 +124,6 @@ mod tests {
             content.contains("http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png")
         );
 
-        fs::remove_file(path).unwrap();
+        fs::remove_file(path).expect("test output should be removable");
     }
 }

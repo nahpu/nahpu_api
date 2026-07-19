@@ -1,16 +1,19 @@
 #![warn(missing_docs)]
-//! `nahpu_export` provides functionality for rendering database exports into formats like Markdown, Typst, and PDF.
+//! Document rendering for NAHPU Markdown, Typst, and PDF exports.
 
-/// Contains the core logic for structuring and formatting exports into Typst and Markdown documents.
+/// Structures and formats exports as Typst and Markdown documents.
 pub mod document;
+mod error;
 /// Contains the data models used for deserializing database records.
 pub mod models;
 /// Provides the integration with the Typst compiler to render `.typ` code into `.pdf` binaries.
-pub mod typst_compiler;
+mod typst_compiler;
 
 /// The current version of the `nahpu_export` crate, derived from the Cargo package version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub use document::DocumentExport;
+pub use document::DocumentRenderer;
 pub use document::markdown_to_typst;
+pub use error::ExportError;
 pub use models::*;
+pub use typst_compiler::TypstCompiler;

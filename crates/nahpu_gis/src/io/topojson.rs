@@ -6,16 +6,16 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-pub struct TopoJsonExporter<'a> {
+pub(crate) struct TopoJsonExporter<'a> {
     data: &'a [CoordinateData],
 }
 
 impl<'a> TopoJsonExporter<'a> {
-    pub fn new(data: &'a [CoordinateData]) -> Self {
+    pub(crate) fn new(data: &'a [CoordinateData]) -> Self {
         Self { data }
     }
 
-    pub fn export_topojson(&self, path: &Path) -> Result<(), String> {
+    pub(crate) fn export(&self, path: &Path) -> Result<(), String> {
         let mut geometries = Vec::new();
 
         for coord in self.data {
@@ -23,16 +23,14 @@ impl<'a> TopoJsonExporter<'a> {
                 let mut geometry = Map::new();
                 geometry.insert("type".to_string(), Value::String("Point".to_string()));
 
+                let number = |value| {
+                    serde_json::Number::from_f64(value)
+                        .map(Value::Number)
+                        .ok_or_else(|| "coordinate values must be finite".to_owned())
+                };
                 let coords = match coord.elevation_in_meter {
-                    Some(elev) => vec![
-                        Value::Number(serde_json::Number::from_f64(lon).unwrap()),
-                        Value::Number(serde_json::Number::from_f64(lat).unwrap()),
-                        Value::Number(serde_json::Number::from_f64(elev).unwrap()),
-                    ],
-                    None => vec![
-                        Value::Number(serde_json::Number::from_f64(lon).unwrap()),
-                        Value::Number(serde_json::Number::from_f64(lat).unwrap()),
-                    ],
+                    Some(elevation) => vec![number(lon)?, number(lat)?, number(elevation)?],
+                    None => vec![number(lon)?, number(lat)?],
                 };
                 geometry.insert("coordinates".to_string(), Value::Array(coords));
 
@@ -92,7 +90,9 @@ mod tests {
 
         let coords = [coord];
         let exporter = TopoJsonExporter::new(&coords);
-        exporter.export_topojson(&path).unwrap();
+        exporter
+            .export(&path)
+            .expect("TopoJSON export should succeed");
 
         assert!(path.exists());
     }

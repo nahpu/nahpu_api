@@ -8,14 +8,18 @@ use quick_xml::{Reader, events::Event};
 use std::{fs, path::Path};
 
 #[derive(Debug, Clone)]
+/// Coordinates and diagnostics produced by a GIS file import.
 pub struct CoordinateImportResult {
+    /// Valid point coordinates read from the input.
     pub coordinates: Vec<CoordinateData>,
+    /// Number of unsupported or invalid records skipped during import.
     pub skipped_count: u64,
+    /// Human-readable import diagnostics.
     pub warnings: Vec<String>,
 }
 
 impl CoordinateImportResult {
-    pub fn import(path: impl AsRef<Path>) -> Result<Self, String> {
+    pub(crate) fn import(path: impl AsRef<Path>) -> Result<Self, String> {
         let path = path.as_ref();
         let extension = path
             .extension()
@@ -276,10 +280,21 @@ mod tests {
 
     #[test]
     fn imports_geojson_points_and_skips_lines() {
-        let directory = tempdir().unwrap();
+        let directory = tempdir().expect("temporary directory should be created");
         let path = directory.path().join("field.geojson");
-        fs::write(&path, r#"{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[2,1,3]},"properties":{"name":"A"}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[0,0],[1,1]]},"properties":{}}]}"#).unwrap();
-        let result = CoordinateImportResult::import(&path).unwrap();
+        fs::write(
+            &path,
+            concat!(
+                r#"{"type":"FeatureCollection","features":["#,
+                r#"{"type":"Feature","geometry":{"type":"Point","#,
+                r#""coordinates":[2,1,3]},"properties":{"name":"A"}},"#,
+                r#"{"type":"Feature","geometry":{"type":"LineString","#,
+                r#""coordinates":[[0,0],[1,1]]},"properties":{}}]}"#,
+            ),
+        )
+        .expect("test GeoJSON should be written");
+        let result =
+            CoordinateImportResult::import(&path).expect("coordinate import should succeed");
         assert_eq!(result.coordinates.len(), 1);
         assert_eq!(result.coordinates[0].name_id, "A");
         assert_eq!(result.skipped_count, 1);
@@ -287,10 +302,19 @@ mod tests {
 
     #[test]
     fn imports_gpx_waypoints_only() {
-        let directory = tempdir().unwrap();
+        let directory = tempdir().expect("temporary directory should be created");
         let path = directory.path().join("field.gpx");
-        fs::write(&path, r#"<gpx><wpt lat="1" lon="2"><ele>3</ele><name>A</name></wpt><trk><name>ignored</name></trk></gpx>"#).unwrap();
-        let result = CoordinateImportResult::import(&path).unwrap();
+        fs::write(
+            &path,
+            concat!(
+                r#"<gpx><wpt lat="1" lon="2">"#,
+                "<ele>3</ele><name>A</name></wpt>",
+                "<trk><name>ignored</name></trk></gpx>",
+            ),
+        )
+        .expect("test GPX should be written");
+        let result =
+            CoordinateImportResult::import(&path).expect("coordinate import should succeed");
         assert_eq!(result.coordinates.len(), 1);
         assert_eq!(result.coordinates[0].elevation_in_meter, Some(3.0));
         assert!(

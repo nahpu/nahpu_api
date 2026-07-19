@@ -1,20 +1,25 @@
 use crate::models::ExportData;
+use crate::{ExportError, TypstCompiler};
 
 /// Represents the engine that converts `ExportData` records into formatted documents.
-pub struct DocumentExport {
+pub struct DocumentRenderer {
     /// The parsed database records containing narratives, sites, events, and specimens.
     pub data: ExportData,
 }
 
-impl DocumentExport {
-    /// Constructs a new `DocumentExport` by deserializing the provided JSON data into `ExportData`.
-    pub fn new(json_data: &str) -> Result<Self, serde_json::Error> {
-        let data: ExportData = serde_json::from_str(json_data)?;
-        Ok(Self { data })
+impl DocumentRenderer {
+    /// Constructs a renderer from typed export data.
+    pub fn new(data: ExportData) -> Self {
+        Self { data }
+    }
+
+    /// Constructs a renderer by deserializing JSON export data.
+    pub fn from_json(json_data: &str) -> Result<Self, ExportError> {
+        Ok(Self::new(serde_json::from_str(json_data)?))
     }
 
     /// Generates a standard Markdown (`.md`) representation of the database records.
-    pub fn to_markdown(&self) -> String {
+    pub fn render_markdown(&self) -> String {
         let mut out = String::new();
 
         if let Some(narratives) = &self.data.narrative {
@@ -82,7 +87,7 @@ impl DocumentExport {
     }
 
     /// Generates a Typst (`.typ`) source code representation of the database records.
-    pub fn to_typst(&self) -> String {
+    pub fn render_typst(&self) -> String {
         let mut out = String::new();
 
         if let Some(narratives) = &self.data.narrative {
@@ -151,9 +156,8 @@ impl DocumentExport {
 
     /// Helper for returning PDF bytes from Typst. We pass font_bytes as an argument
     /// which can be loaded in Dart (since Flutter can easily read assets as bytes).
-    pub fn to_pdf(&self, font_bytes: Vec<Vec<u8>>) -> Result<Vec<u8>, String> {
-        let typst_source = self.to_typst();
-        crate::typst_compiler::compile_to_pdf(&typst_source, font_bytes).map_err(|e| e.to_string())
+    pub fn render_pdf(&self, compiler: &TypstCompiler) -> Result<Vec<u8>, ExportError> {
+        compiler.compile(&self.render_typst())
     }
 }
 
@@ -171,24 +175,6 @@ pub fn markdown_to_typst(md_text: &str) -> String {
     let mut out = String::with_capacity(md_text.len() * 2);
     let mut list_stack = Vec::new();
     let mut in_code_block = false;
-
-    fn push_newline(s: &mut String) {
-        if !s.is_empty() && !s.ends_with('\n') {
-            s.push('\n');
-        }
-    }
-
-    fn push_double_newline(s: &mut String) {
-        if !s.is_empty() {
-            if s.ends_with("\n\n") {
-                // Do nothing
-            } else if s.ends_with('\n') {
-                s.push('\n');
-            } else {
-                s.push_str("\n\n");
-            }
-        }
-    }
 
     for event in parser {
         match event {
@@ -318,6 +304,23 @@ pub fn markdown_to_typst(md_text: &str) -> String {
     out.trim().to_string()
 }
 
+fn push_newline(output: &mut String) {
+    if !output.is_empty() && !output.ends_with('\n') {
+        output.push('\n');
+    }
+}
+
+fn push_double_newline(output: &mut String) {
+    if output.is_empty() || output.ends_with("\n\n") {
+        return;
+    }
+    if output.ends_with('\n') {
+        output.push('\n');
+    } else {
+        output.push_str("\n\n");
+    }
+}
+
 fn escape_markdown(text: &str) -> String {
     let mut escaped = String::with_capacity(text.len() + 10);
     for c in text.chars() {
@@ -353,7 +356,11 @@ mod tests {
 
     #[test]
     fn test_markdown_to_typst_nested_lists() {
-        let md = "Some **bold** and *italic* text.\n\n- Item 1\n  - Nested Item 1a\n  - Nested Item 1b\n- Item 2\n\n1. Numbered 1\n   1. Nested Numbered 1a\n2. Numbered 2";
+        let md = concat!(
+            "Some **bold** and *italic* text.\n\n",
+            "- Item 1\n  - Nested Item 1a\n  - Nested Item 1b\n- Item 2\n\n",
+            "1. Numbered 1\n   1. Nested Numbered 1a\n2. Numbered 2",
+        );
         let typst = markdown_to_typst(md);
         println!("Generated Typst nested lists:\n{}", typst);
         assert!(typst.contains("- Item 1\n  - Nested Item 1a\n  - Nested Item 1b\n- Item 2"));
@@ -362,7 +369,10 @@ mod tests {
 
     #[test]
     fn test_markdown_to_typst_code_blocks() {
-        let md = "Inline `code_with_underscore` and block:\n\n```rust\nfn my_function_name() {\n    let x = 42;\n}\n```";
+        let md = concat!(
+            "Inline `code_with_underscore` and block:\n\n```rust\n",
+            "fn my_function_name() {\n    let x = 42;\n}\n```",
+        );
         let typst = markdown_to_typst(md);
         println!("Generated Typst code blocks:\n{}", typst);
         assert!(typst.contains("`code_with_underscore`"));
@@ -373,7 +383,10 @@ mod tests {
 
     #[test]
     fn test_markdown_to_typst_links_images() {
-        let md = "[link_text](https://example.com/some_url_with_underscores) and ![alt_text](img_with_underscores.png)";
+        let md = concat!(
+            "[link_text](https://example.com/some_url_with_underscores) and ",
+            "![alt_text](img_with_underscores.png)",
+        );
         let typst = markdown_to_typst(md);
         println!("Generated Typst links/images:\n{}", typst);
         assert!(typst.contains("#link(\"https://example.com/some_url_with_underscores\")"));
@@ -393,9 +406,31 @@ mod tests {
 
     #[test]
     fn test_pdf_compilation() {
-        let md = "Some **bold** and *italic* text.\n\n- Item 1\n- Item 2\n\n1. Numbered 1\n2. Numbered 2";
+        let md = concat!(
+            "Some **bold** and *italic* text.\n\n",
+            "- Item 1\n- Item 2\n\n1. Numbered 1\n2. Numbered 2",
+        );
         let typst = markdown_to_typst(md);
-        let pdf_res = crate::typst_compiler::compile_to_pdf(&typst, vec![]);
+        let pdf_res = TypstCompiler::new(vec![]).compile(&typst);
         assert!(pdf_res.is_ok(), "Failed to compile: {:?}", pdf_res.err());
+    }
+
+    #[test]
+    fn parses_document_json_with_contextual_errors() {
+        let renderer = DocumentRenderer::from_json("{}")
+            .expect("empty optional collections should be accepted");
+        assert!(renderer.render_markdown().is_empty());
+        assert!(DocumentRenderer::from_json("not JSON").is_err());
+    }
+
+    #[test]
+    fn reports_invalid_typst_and_missing_assets() {
+        let compiler = TypstCompiler::new(vec![]);
+        assert!(compiler.compile("#this-function-does-not-exist()").is_err());
+        assert!(
+            compiler
+                .compile("#image(\"/missing/nahpu-image.png\")")
+                .is_err()
+        );
     }
 }

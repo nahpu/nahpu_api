@@ -1,6 +1,6 @@
 [package]
 name = "nahpu_gis"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 authors = ["Heru Handika <herubiolog@gmail.com>"]
 description = "A utility crate for spatial analysis and GIS data processing."
@@ -22,4 +22,5 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 shapefile = { version = "0.8.0", features = ["geo-types"] }
 tempfile = "3.27.0"
+thiserror = "2.0"
 utm = "0.1"

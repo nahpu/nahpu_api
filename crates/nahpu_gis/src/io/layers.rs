@@ -13,17 +13,23 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Number, Value as JsonValue};
 use tempfile::tempdir;
 
+use crate::GeographicBounds;
+
 /// Metadata returned after a vector layer has been normalized to GeoJSON.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConvertedVectorLayer {
-    pub output_path: String,
+    /// Path containing the normalized GeoJSON output.
+    pub output_path: PathBuf,
+    /// Number of features in the output.
     pub feature_count: u64,
-    pub bounds: Option<Vec<f64>>,
+    /// Bounds of all finite coordinates in the output.
+    pub bounds: Option<GeographicBounds>,
+    /// Coordinate reference system of the normalized output.
     pub source_crs: String,
 }
 
 /// Converts a GeoJSON file or zipped WGS84 Shapefile into normalized GeoJSON.
-pub fn convert_vector_to_geojson(
+pub(crate) fn convert_vector_to_geojson(
     input_path: impl AsRef<Path>,
     output_path: impl AsRef<Path>,
 ) -> Result<ConvertedVectorLayer, String> {
@@ -46,7 +52,7 @@ pub fn convert_vector_to_geojson(
     fs::write(output_path, GeoJson::from(collection.clone()).to_string())
         .map_err(|error| error.to_string())?;
     Ok(ConvertedVectorLayer {
-        output_path: output_path.to_string_lossy().into_owned(),
+        output_path: output_path.to_path_buf(),
         feature_count: collection.features.len() as u64,
         bounds,
         source_crs: "EPSG:4326".to_owned(),
@@ -167,7 +173,7 @@ fn number_or_null(value: Option<f64>) -> JsonValue {
         .unwrap_or(JsonValue::Null)
 }
 
-fn feature_collection_bounds(collection: &FeatureCollection) -> Option<Vec<f64>> {
+fn feature_collection_bounds(collection: &FeatureCollection) -> Option<GeographicBounds> {
     let mut bounds = [
         f64::INFINITY,
         f64::INFINITY,
@@ -181,7 +187,12 @@ fn feature_collection_bounds(collection: &FeatureCollection) -> Option<Vec<f64>>
     {
         visit_coordinates(&geometry.value, &mut bounds);
     }
-    bounds[0].is_finite().then(|| bounds.to_vec())
+    bounds[0].is_finite().then_some(GeographicBounds {
+        west: bounds[0],
+        south: bounds[1],
+        east: bounds[2],
+        north: bounds[3],
+    })
 }
 
 fn visit_coordinates(value: &GeometryValue, bounds: &mut [f64; 4]) {
@@ -232,7 +243,7 @@ mod tests {
 
     #[test]
     fn normalizes_geojson_and_reports_metadata() {
-        let directory = tempdir().unwrap();
+        let directory = tempdir().expect("temporary directory should be created");
         let input = directory.path().join("input.geojson");
         let output = directory.path().join("output.geojson");
         fs::write(
@@ -242,12 +253,21 @@ mod tests {
                 r#""coordinates":[-91.5,36.2]},"properties":{"name":"site"}}"#,
             ),
         )
-        .unwrap();
+        .expect("test GeoJSON should be written");
 
-        let result = convert_vector_to_geojson(&input, &output).unwrap();
+        let result =
+            convert_vector_to_geojson(&input, &output).expect("vector conversion should succeed");
 
         assert_eq!(result.feature_count, 1);
-        assert_eq!(result.bounds, Some(vec![-91.5, 36.2, -91.5, 36.2]));
+        assert_eq!(
+            result.bounds,
+            Some(GeographicBounds {
+                west: -91.5,
+                south: 36.2,
+                east: -91.5,
+                north: 36.2,
+            })
+        );
         assert!(output.exists());
     }
 }

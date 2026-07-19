@@ -6,24 +6,20 @@ use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, World};
 
+use crate::ExportError;
+
 /// Represents a Typst environment needed to compile a single document.
 /// It contains a virtual file system to allow document previews and a font book.
-pub struct SimpleWorld {
+struct TypstWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
     fonts: Vec<Font>,
     source: Source,
 }
 
-impl SimpleWorld {
-    /// Constructs a `SimpleWorld` using the provided raw Typst source code and a list of font bytes.
-    pub fn new(source_text: String, fonts_bytes: Vec<Vec<u8>>) -> Self {
-        let mut fonts = Vec::new();
-        for bytes in fonts_bytes {
-            let bytes: Bytes = bytes.into();
-            fonts.extend(Font::iter(bytes));
-        }
-
+impl TypstWorld {
+    /// Constructs a world from Typst source and parsed fonts.
+    fn new(source_text: String, fonts: Vec<Font>) -> Self {
         let mut book = FontBook::new();
         for font in &fonts {
             book.push(font.info().clone());
@@ -39,7 +35,7 @@ impl SimpleWorld {
     }
 }
 
-impl World for SimpleWorld {
+impl World for TypstWorld {
     fn library(&self) -> &LazyHash<Library> {
         &self.library
     }
@@ -64,19 +60,18 @@ impl World for SimpleWorld {
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
         let path = id.vpath().as_rootless_path();
-        // Since we are generating the Typst source dynamically and we pass absolute paths for images,
-        // we can attempt to read from the path directly.
+        // Generated sources use absolute image paths, so first read the path directly.
         if let Ok(bytes) = std::fs::read(path) {
             return Ok(bytes.into());
         }
 
-        // On Unix/macOS, try prepending `/` to make it absolute if it was originally an absolute path
+        // On Unix and macOS, restore the leading slash removed by Typst.
         let with_slash = std::path::Path::new("/").join(path);
         if let Ok(bytes) = std::fs::read(&with_slash) {
             return Ok(bytes.into());
         }
 
-        // On Windows, handle cases where the path starts with a drive letter (e.g. C/Users/... or C:/Users/...)
+        // On Windows, restore drive-letter paths such as C/Users or C:/Users.
         #[cfg(windows)]
         {
             let path_str = path.to_string_lossy();
@@ -103,16 +98,30 @@ impl World for SimpleWorld {
     }
 }
 
-/// Compiles the provided Typst source code into a PDF binary.
-pub fn compile_to_pdf(source: &str, fonts_bytes: Vec<Vec<u8>>) -> Result<Vec<u8>, String> {
-    let world = SimpleWorld::new(source.to_string(), fonts_bytes);
+/// Reusable compiler for Typst source and caller-provided fonts.
+pub struct TypstCompiler {
+    fonts: Vec<Font>,
+}
 
-    let document = typst::compile(&world)
-        .output
-        .map_err(|err| format!("Compilation error: {:?}", err))?;
+impl TypstCompiler {
+    /// Creates a compiler from raw font files.
+    pub fn new(font_bytes: Vec<Vec<u8>>) -> Self {
+        let fonts = font_bytes
+            .into_iter()
+            .flat_map(|bytes| Font::iter(Bytes::from(bytes)))
+            .collect();
+        Self { fonts }
+    }
 
-    let pdf_bytes = typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default())
-        .map_err(|err| format!("PDF generation error: {:?}", err))?;
+    /// Compiles Typst source into PDF bytes.
+    pub fn compile(&self, source: &str) -> Result<Vec<u8>, ExportError> {
+        let world = TypstWorld::new(source.to_owned(), self.fonts.clone());
 
-    Ok(pdf_bytes)
+        let document = typst::compile(&world)
+            .output
+            .map_err(|diagnostics| ExportError::TypstCompilation(format!("{diagnostics:?}")))?;
+
+        typst_pdf::pdf(&document, &typst_pdf::PdfOptions::default())
+            .map_err(|error| ExportError::PdfGeneration(format!("{error:?}")))
+    }
 }

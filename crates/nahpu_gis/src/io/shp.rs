@@ -6,22 +6,24 @@ use shapefile::{PointZ, Writer};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub struct ShapefileExporter<'a> {
+pub(crate) struct ShapefileExporter<'a> {
     data: &'a [CoordinateData],
 }
 
 impl<'a> ShapefileExporter<'a> {
-    pub fn new(data: &'a [CoordinateData]) -> Self {
+    pub(crate) fn new(data: &'a [CoordinateData]) -> Self {
         Self { data }
     }
 
-    pub fn export_shp(&self, output_zip_path: &Path) -> Result<(), String> {
+    pub(crate) fn export(&self, output_zip_path: &Path) -> Result<(), String> {
         let temp_dir = tempfile::tempdir().map_err(|e| e.to_string())?;
         let shp_path = temp_dir.path().join("coordinates.shp");
 
+        let name_field = dbase::FieldName::try_from("nameId").map_err(|error| error.to_string())?;
+        let notes_field = dbase::FieldName::try_from("notes").map_err(|error| error.to_string())?;
         let table_builder = dbase::TableWriterBuilder::new()
-            .add_character_field(dbase::FieldName::try_from("nameId").unwrap(), 254)
-            .add_character_field(dbase::FieldName::try_from("notes").unwrap(), 254);
+            .add_character_field(name_field, 254)
+            .add_character_field(notes_field, 254);
         let mut writer = Writer::from_path(&shp_path, table_builder).map_err(|e| e.to_string())?;
 
         for coord in self.data {
@@ -51,14 +53,21 @@ impl<'a> ShapefileExporter<'a> {
         drop(writer);
 
         let prj_path = temp_dir.path().join("coordinates.prj");
-        let wgs84_prj = r#"GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]"#;
+        let wgs84_prj = concat!(
+            r#"GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984","#,
+            r#"SPHEROID["WGS_1984",6378137.0,298.257223563]],"#,
+            r#"PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]"#,
+        );
         fs::write(&prj_path, wgs84_prj).map_err(|e| e.to_string())?;
 
         let files: Vec<PathBuf> = fs::read_dir(temp_dir.path())
             .map_err(|e| e.to_string())?
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .collect();
+            .map(|entry| {
+                entry
+                    .map(|value| value.path())
+                    .map_err(|error| error.to_string())
+            })
+            .collect::<Result<_, _>>()?;
 
         let archiver = ZipArchive::new(temp_dir.path(), None, output_zip_path, &files);
         archiver.write().map_err(|e| e.to_string())?;
@@ -87,7 +96,9 @@ mod tests {
 
         let coords = [coord];
         let exporter = ShapefileExporter::new(&coords);
-        exporter.export_shp(&path).unwrap();
+        exporter
+            .export(&path)
+            .expect("Shapefile export should succeed");
 
         assert!(path.exists());
     }

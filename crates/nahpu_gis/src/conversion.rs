@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::GisError;
+
 /// Represents a geographic cardinal direction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CardinalDirection {
@@ -69,6 +71,26 @@ impl DmsCoordinate {
         }
     }
 
+    /// Validates component ranges for the coordinate direction.
+    pub fn validate(&self) -> Result<(), GisError> {
+        if self.minutes >= 60 {
+            return Err(GisError::InvalidCoordinate(
+                "DMS minutes must be less than 60".to_owned(),
+            ));
+        }
+        if !self.seconds.is_finite() || !(0.0..60.0).contains(&self.seconds) {
+            return Err(GisError::InvalidCoordinate(
+                "DMS seconds must be finite and less than 60".to_owned(),
+            ));
+        }
+        validate_degrees(
+            self.degrees,
+            self.minutes as f64,
+            self.seconds,
+            self.direction,
+        )
+    }
+
     /// Converts a decimal coordinate and direction into a `DmsCoordinate`.
     ///
     /// # Examples
@@ -97,7 +119,7 @@ impl DmsCoordinate {
 }
 
 impl std::str::FromStr for DmsCoordinate {
-    type Err = String;
+    type Err = GisError;
 
     /// Parses a DMS coordinate from a string.
     ///
@@ -117,8 +139,10 @@ impl std::str::FromStr for DmsCoordinate {
         let clean_upper = clean.to_ascii_uppercase();
 
         let tokens = tokenize_positive_numbers(clean);
-        if tokens.len() < 3 {
-            return Err("DMS format requires at least 3 numeric components".to_string());
+        if tokens.len() != 3 {
+            return Err(GisError::Data(
+                "DMS format requires exactly 3 numeric components".to_owned(),
+            ));
         }
 
         let degrees = tokens[0] as u32;
@@ -135,12 +159,14 @@ impl std::str::FromStr for DmsCoordinate {
             CardinalDirection::North
         };
 
-        Ok(Self {
+        let coordinate = Self {
             degrees,
             minutes,
             seconds,
             direction,
-        })
+        };
+        coordinate.validate()?;
+        Ok(coordinate)
     }
 }
 
@@ -175,6 +201,16 @@ impl DdmCoordinate {
         }
     }
 
+    /// Validates component ranges for the coordinate direction.
+    pub fn validate(&self) -> Result<(), GisError> {
+        if !self.minutes.is_finite() || !(0.0..60.0).contains(&self.minutes) {
+            return Err(GisError::InvalidCoordinate(
+                "DDM minutes must be finite and less than 60".to_owned(),
+            ));
+        }
+        validate_degrees(self.degrees, self.minutes, 0.0, self.direction)
+    }
+
     /// Converts a decimal coordinate and direction into a `DdmCoordinate`.
     pub fn from_decimal(decimal: f64, direction: CardinalDirection) -> Self {
         let abs_val = decimal.abs();
@@ -189,7 +225,7 @@ impl DdmCoordinate {
 }
 
 impl std::str::FromStr for DdmCoordinate {
-    type Err = String;
+    type Err = GisError;
 
     /// Parses a DDM coordinate from a string.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -197,8 +233,10 @@ impl std::str::FromStr for DdmCoordinate {
         let clean_upper = clean.to_ascii_uppercase();
 
         let tokens = tokenize_positive_numbers(clean);
-        if tokens.len() < 2 {
-            return Err("DDM format requires at least 2 numeric components".to_string());
+        if tokens.len() != 2 {
+            return Err(GisError::Data(
+                "DDM format requires exactly 2 numeric components".to_owned(),
+            ));
         }
 
         let degrees = tokens[0] as u32;
@@ -214,11 +252,13 @@ impl std::str::FromStr for DdmCoordinate {
             CardinalDirection::North
         };
 
-        Ok(Self {
+        let coordinate = Self {
             degrees,
             minutes,
             direction,
-        })
+        };
+        coordinate.validate()?;
+        Ok(coordinate)
     }
 }
 
@@ -242,15 +282,24 @@ impl UtmCoordinate {
         hemisphere: CardinalDirection,
         easting: f64,
         northing: f64,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, GisError> {
         if zone == 0 || zone > 60 {
-            return Err("UTM zone must be between 1 and 60".to_string());
+            return Err(GisError::InvalidCoordinate(
+                "UTM zone must be between 1 and 60".to_owned(),
+            ));
         }
         if !matches!(
             hemisphere,
             CardinalDirection::North | CardinalDirection::South
         ) {
-            return Err("UTM hemisphere must be North or South".to_string());
+            return Err(GisError::InvalidCoordinate(
+                "UTM hemisphere must be North or South".to_owned(),
+            ));
+        }
+        if !easting.is_finite() || !northing.is_finite() {
+            return Err(GisError::InvalidCoordinate(
+                "UTM easting and northing must be finite".to_owned(),
+            ));
         }
         Ok(Self {
             zone,
@@ -261,24 +310,35 @@ impl UtmCoordinate {
     }
 
     /// Converts the UTM coordinate to a decimal latitude and longitude (WGS84) pair.
-    pub fn to_lat_lon(&self) -> Result<(f64, f64), String> {
+    pub fn to_lat_lon(&self) -> Result<(f64, f64), GisError> {
         let zone_letter = match self.hemisphere {
             CardinalDirection::North => 'N',
             CardinalDirection::South => 'M', // 'M' is Southern hemisphere band
-            _ => return Err("Invalid UTM hemisphere".to_string()),
+            _ => {
+                return Err(GisError::InvalidCoordinate(
+                    "UTM hemisphere must be North or South".to_owned(),
+                ));
+            }
         };
         let (lat, lon) =
             utm::wsg84_utm_to_lat_lon(self.easting, self.northing, self.zone, zone_letter)
-                .map_err(|e| format!("UTM conversion error: {:?}", e))?;
+                .map_err(|error| GisError::Operation(format!("UTM conversion error: {error:?}")))?;
         Ok((lat, lon))
     }
 
     /// Converts a decimal latitude and longitude (WGS84) to a `UtmCoordinate`.
-    pub fn from_lat_lon(latitude: f64, longitude: f64) -> Result<Self, String> {
-        if !(-80.0..=84.0).contains(&latitude) {
-            return Err("UTM coordinates are only defined between 80S and 84N".to_string());
+    pub fn from_lat_lon(latitude: f64, longitude: f64) -> Result<Self, GisError> {
+        if !latitude.is_finite() || !(-80.0..=84.0).contains(&latitude) {
+            return Err(GisError::InvalidCoordinate(
+                "UTM coordinates are only defined between 80S and 84N".to_owned(),
+            ));
         }
-        let zone = ((longitude + 180.0) / 6.0).floor() as u8 + 1;
+        if !longitude.is_finite() || !(-180.0..=180.0).contains(&longitude) {
+            return Err(GisError::InvalidCoordinate(
+                "longitude must be finite and between -180 and 180".to_owned(),
+            ));
+        }
+        let zone = (((longitude + 180.0) / 6.0).floor() as u8 + 1).min(60);
         let (northing, easting, _) = utm::to_utm_wgs84(latitude, longitude, zone);
         let hemisphere = if latitude >= 0.0 {
             CardinalDirection::North
@@ -304,7 +364,7 @@ impl CoordinateConverter {
     /// - Decimal Degrees (e.g. `41.403389`, `-123.45`, `41.403389 N`)
     /// - Degrees Decimal Minutes (e.g. `41° 24.2028' N`, `41 24.2028 N`)
     /// - Degrees Minutes Seconds (e.g. `41° 24' 12.2" N`, `41 24 12.2 N`)
-    pub fn parse_to_decimal<S>(s: S) -> Result<f64, String>
+    pub fn parse_to_decimal<S>(s: S) -> Result<f64, GisError>
     where
         S: AsRef<str>,
     {
@@ -326,10 +386,10 @@ impl CoordinateConverter {
                 dms.to_decimal().abs()
             }
             _ => {
-                return Err(format!(
+                return Err(GisError::Data(format!(
                     "Unable to parse coordinate: '{}'. Expected 1, 2, or 3 numeric components.",
                     text
-                ));
+                )));
             }
         };
 
@@ -339,6 +399,24 @@ impl CoordinateConverter {
             Ok(abs_val)
         }
     }
+}
+
+fn validate_degrees(
+    degrees: u32,
+    minutes: f64,
+    seconds: f64,
+    direction: CardinalDirection,
+) -> Result<(), GisError> {
+    let maximum = match direction {
+        CardinalDirection::North | CardinalDirection::South => 90,
+        CardinalDirection::East | CardinalDirection::West => 180,
+    };
+    if degrees > maximum || (degrees == maximum && (minutes > 0.0 || seconds > 0.0)) {
+        return Err(GisError::InvalidCoordinate(format!(
+            "degrees exceed the valid range for {direction:?}"
+        )));
+    }
+    Ok(())
 }
 
 /// Helper to tokenize a string into positive floating point numbers.
@@ -407,6 +485,19 @@ mod tests {
         let (lat, lon) = utm_coord.to_lat_lon().unwrap();
         assert!((lat - 34.0522).abs() < 1e-4);
         assert!((lon - (-118.2437)).abs() < 1e-4);
+
+        let boundary = UtmCoordinate::from_lat_lon(0.0, 180.0)
+            .expect("the antimeridian should have a valid UTM zone");
+        assert_eq!(boundary.zone, 60);
+        assert!(UtmCoordinate::from_lat_lon(0.0, 181.0).is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_sexagesimal_components() {
+        assert!("41 60 0 N".parse::<DmsCoordinate>().is_err());
+        assert!("41 0 60 N".parse::<DmsCoordinate>().is_err());
+        assert!("91 0 N".parse::<DdmCoordinate>().is_err());
+        assert!("181 0 E".parse::<DdmCoordinate>().is_err());
     }
 
     #[test]
