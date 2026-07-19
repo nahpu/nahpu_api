@@ -26,7 +26,7 @@ Integration tests live in crate-local `tests/` directories, for example `crates/
 
 ## Rust Style & Best Practices
 
-Use `rustfmt`, follow the Rust API Guidelines, and keep Rust code, comments, and docstrings to 100 characters per line. Wrap long signatures cleanly. Prefer `struct` plus `impl` over loose globals. Put public methods first in `impl` blocks.
+Use `rustfmt`, follow the Rust API Guidelines, and keep Rust code, comments, and docstrings to 100 characters per line. Wrap long signatures cleanly. Organize related state and behavior into structs with impl blocks. Prefer methods over free functions when the behavior naturally belongs to a type, but use free functions when no type is a clear owner. Do not define functions inside other functions; extract helpers into private methods or module-level private functions. Expose only the methods required by the public API. Within each impl block, place public methods before private methods.
 
 Use `?`, pattern matching, and references instead of unnecessary clones. Avoid `.unwrap()` unless justified. Use `snake_case` for functions and variables, `PascalCase` for types and traits, and `SCREAMING_SNAKE_CASE` for constants.
 
