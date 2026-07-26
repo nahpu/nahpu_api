@@ -33,9 +33,9 @@ pub const NAHPU_TABLES: [&str; 21] = [
     "personnel",
     "taxonomy",
     "specimen",
-    "mammalMeasurement",
-    "avianMeasurement",
-    "herpMeasurement",
+    "mammalAttribute",
+    "birdAttribute",
+    "herpAttribute",
     "specimenPart",
 ];
 

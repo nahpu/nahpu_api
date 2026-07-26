@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+
+- Map the canonical mammal, bird, and herpetofauna attribute namespaces.
+- Preserve Darwin Core mappings for legacy measurement namespace aliases.
+
 ## 0.2.0
 
 - Export Darwin Core Data Packages as tar.gz or ZIP archives.

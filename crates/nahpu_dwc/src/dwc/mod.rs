@@ -2,7 +2,7 @@
 //!
 //! This module contains the mapping logic from the Nahpu database schema
 //! to the Darwin Core standard terms. This mapping is manually defined based on
-//! the `tables_dwc_mapping.md` documentation.
+//! the [Persistence data documentation](https://nahpu.app/en/contributing/code/database/).
 
 /// A utility struct for mapping Nahpu schema names to Darwin Core terms.
 pub struct DwcMapper;
@@ -41,8 +41,8 @@ impl DwcMapper {
             "specimenMedia" => Self::map_specimen_media_column(column_name),
             "personnelList" => Self::map_personnel_list_column(column_name),
             "weather" => Self::map_weather_column(column_name),
-            "mammalMeasurement" => Self::map_mammal_measurement_column(column_name),
-            "avianMeasurement" => Self::map_avian_measurement_column(column_name),
+            "mammalAttribute" => Self::map_mammal_attribute_column(column_name),
+            "birdAttribute" => Self::map_bird_attribute_column(column_name),
             _ => None,
         }
     }
@@ -55,6 +55,9 @@ impl DwcMapper {
         let (table_name, column_name) = source_key.split_once("::")?;
         let table_name = match table_name {
             "event" => "collEvent",
+            "mammalMeasurement" => "mammalAttribute",
+            "avianMeasurement" => "birdAttribute",
+            "herpMeasurement" => "herpAttribute",
             table_name => table_name,
         };
         Self::get_dwc_term(table_name, column_name)
@@ -98,73 +101,78 @@ impl DwcMapper {
     }
 
     fn measurement_mapping(source_key: &str) -> Option<DwcMapping> {
+        let legacy_alias = match source_key.split_once("::") {
+            Some(("mammalMeasurement", column)) => Some(format!("mammalAttribute::{column}")),
+            Some(("avianMeasurement", column)) => Some(format!("birdAttribute::{column}")),
+            Some(("herpMeasurement", column)) => Some(format!("herpAttribute::{column}")),
+            _ => None,
+        };
+        let source_key = legacy_alias.as_deref().unwrap_or(source_key);
         let (measurement_type, measurement_unit) = match source_key {
-            "mammalMeasurement::totalLength" => ("total length", Some("mm")),
-            "mammalMeasurement::tailLength" => ("tail length", Some("mm")),
-            "mammalMeasurement::hindFootLength" => ("hind foot length", Some("mm")),
-            "mammalMeasurement::earLength" => ("ear length", Some("mm")),
-            "mammalMeasurement::forearm" => ("forearm length", Some("mm")),
-            "mammalMeasurement::tibia" => ("tibia length", Some("mm")),
-            "mammalMeasurement::weight" => ("weight", Some("g")),
-            "mammalMeasurement::frequencyMax" => ("maximum frequency", Some("kHz")),
-            "mammalMeasurement::frequencyMin" => ("minimum frequency", Some("kHz")),
-            "mammalMeasurement::frequencyAtMaxEnergy" => {
-                ("frequency at maximum energy", Some("kHz"))
-            }
-            "mammalMeasurement::duration" => ("echolocation duration", Some("s")),
-            "mammalMeasurement::testisPosition" => ("testis position", None),
-            "mammalMeasurement::testisLength" => ("testis length", Some("mm")),
-            "mammalMeasurement::testisWidth" => ("testis width", Some("mm")),
-            "mammalMeasurement::epididymisAppearance" => ("epididymis appearance", None),
-            "mammalMeasurement::leftPlacentalScars" => ("left placental scars", None),
-            "mammalMeasurement::rightPlacentalScars" => ("right placental scars", None),
-            "mammalMeasurement::mammaeCondition" => ("mammae condition", None),
-            "mammalMeasurement::mammaeInguinalCount" => ("inguinal mammae count", None),
-            "mammalMeasurement::mammaeAxillaryCount" => ("axillary mammae count", None),
-            "mammalMeasurement::mammaeAbdominalCount" => ("abdominal mammae count", None),
-            "mammalMeasurement::vaginaOpening" => ("vagina opening", None),
-            "mammalMeasurement::pubicSymphysis" => ("pubic symphysis", None),
-            "mammalMeasurement::embryoLeftCount" => ("left embryo count", None),
-            "mammalMeasurement::embryoRightCount" => ("right embryo count", None),
-            "mammalMeasurement::embryoCR" => ("embryo crown-rump length", Some("mm")),
-            "mammalMeasurement::echolocation" => ("echolocation", None),
-            "avianMeasurement::weight" => ("weight", Some("g")),
-            "avianMeasurement::wingspan" => ("wingspan", Some("mm")),
-            "avianMeasurement::bursaWidth" => ("bursa width", Some("mm")),
-            "avianMeasurement::bursaLength" => ("bursa length", Some("mm")),
-            "avianMeasurement::testisLength" => ("testis length", Some("mm")),
-            "avianMeasurement::testisWidth" => ("testis width", Some("mm")),
-            "avianMeasurement::ovaryLength" => ("ovary length", Some("mm")),
-            "avianMeasurement::ovaryWidth" => ("ovary width", Some("mm")),
-            "avianMeasurement::oviductWidth" => ("oviduct width", Some("mm")),
-            "avianMeasurement::firstOvaSize" => ("first ova size", Some("mm")),
-            "avianMeasurement::secondOvaSize" => ("second ova size", Some("mm")),
-            "avianMeasurement::thirdOvaSize" => ("third ova size", Some("mm")),
-            "avianMeasurement::skullOssification" => ("skull ossification", Some("%")),
-            "avianMeasurement::irisColor" => ("iris color", None),
-            "avianMeasurement::irisHex" => ("iris color hex", None),
-            "avianMeasurement::billColor" => ("bill color", None),
-            "avianMeasurement::billHex" => ("bill color hex", None),
-            "avianMeasurement::footColor" => ("foot color", None),
-            "avianMeasurement::footHex" => ("foot color hex", None),
-            "avianMeasurement::tarsusColor" => ("tarsus color", None),
-            "avianMeasurement::tarsusHex" => ("tarsus color hex", None),
-            "avianMeasurement::broodPatch" => ("brood patch", None),
-            "avianMeasurement::hasBursa" => ("bursa present", None),
-            "avianMeasurement::fat" => ("fat score", None),
-            "avianMeasurement::stomachContent" => ("stomach content", None),
-            "avianMeasurement::testisRemark" => ("testis remarks", None),
-            "avianMeasurement::ovaryAppearance" => ("ovary appearance", None),
-            "avianMeasurement::oviductAppearance" => ("oviduct appearance", None),
-            "avianMeasurement::ovaryRemark" => ("ovary remarks", None),
-            "avianMeasurement::wingIsMolt" => ("wing molt present", None),
-            "avianMeasurement::wingMolt" => ("wing molt", None),
-            "avianMeasurement::tailIsMolt" => ("tail molt present", None),
-            "avianMeasurement::tailMolt" => ("tail molt", None),
-            "avianMeasurement::bodyMolt" => ("body molt", None),
-            "avianMeasurement::moltRemark" => ("molt remarks", None),
-            "herpMeasurement::weight" => ("weight", Some("g")),
-            "herpMeasurement::svl" => ("snout-vent length", Some("cm")),
+            "mammalAttribute::totalLength" => ("total length", Some("mm")),
+            "mammalAttribute::tailLength" => ("tail length", Some("mm")),
+            "mammalAttribute::hindFootLength" => ("hind foot length", Some("mm")),
+            "mammalAttribute::earLength" => ("ear length", Some("mm")),
+            "mammalAttribute::forearm" => ("forearm length", Some("mm")),
+            "mammalAttribute::tibia" => ("tibia length", Some("mm")),
+            "mammalAttribute::weight" => ("weight", Some("g")),
+            "mammalAttribute::frequencyMax" => ("maximum frequency", Some("kHz")),
+            "mammalAttribute::frequencyMin" => ("minimum frequency", Some("kHz")),
+            "mammalAttribute::frequencyAtMaxEnergy" => ("frequency at maximum energy", Some("kHz")),
+            "mammalAttribute::duration" => ("echolocation duration", Some("s")),
+            "mammalAttribute::testisPosition" => ("testis position", None),
+            "mammalAttribute::testisLength" => ("testis length", Some("mm")),
+            "mammalAttribute::testisWidth" => ("testis width", Some("mm")),
+            "mammalAttribute::epididymisAppearance" => ("epididymis appearance", None),
+            "mammalAttribute::leftPlacentalScars" => ("left placental scars", None),
+            "mammalAttribute::rightPlacentalScars" => ("right placental scars", None),
+            "mammalAttribute::mammaeCondition" => ("mammae condition", None),
+            "mammalAttribute::mammaeInguinalCount" => ("inguinal mammae count", None),
+            "mammalAttribute::mammaeAxillaryCount" => ("axillary mammae count", None),
+            "mammalAttribute::mammaeAbdominalCount" => ("abdominal mammae count", None),
+            "mammalAttribute::vaginaOpening" => ("vagina opening", None),
+            "mammalAttribute::pubicSymphysis" => ("pubic symphysis", None),
+            "mammalAttribute::embryoLeftCount" => ("left embryo count", None),
+            "mammalAttribute::embryoRightCount" => ("right embryo count", None),
+            "mammalAttribute::embryoCR" => ("embryo crown-rump length", Some("mm")),
+            "mammalAttribute::echolocation" => ("echolocation", None),
+            "birdAttribute::weight" => ("weight", Some("g")),
+            "birdAttribute::wingspan" => ("wingspan", Some("mm")),
+            "birdAttribute::bursaWidth" => ("bursa width", Some("mm")),
+            "birdAttribute::bursaLength" => ("bursa length", Some("mm")),
+            "birdAttribute::testisLength" => ("testis length", Some("mm")),
+            "birdAttribute::testisWidth" => ("testis width", Some("mm")),
+            "birdAttribute::ovaryLength" => ("ovary length", Some("mm")),
+            "birdAttribute::ovaryWidth" => ("ovary width", Some("mm")),
+            "birdAttribute::oviductWidth" => ("oviduct width", Some("mm")),
+            "birdAttribute::firstOvaSize" => ("first ova size", Some("mm")),
+            "birdAttribute::secondOvaSize" => ("second ova size", Some("mm")),
+            "birdAttribute::thirdOvaSize" => ("third ova size", Some("mm")),
+            "birdAttribute::skullOssification" => ("skull ossification", Some("%")),
+            "birdAttribute::irisColor" => ("iris color", None),
+            "birdAttribute::irisHex" => ("iris color hex", None),
+            "birdAttribute::billColor" => ("bill color", None),
+            "birdAttribute::billHex" => ("bill color hex", None),
+            "birdAttribute::footColor" => ("foot color", None),
+            "birdAttribute::footHex" => ("foot color hex", None),
+            "birdAttribute::tarsusColor" => ("tarsus color", None),
+            "birdAttribute::tarsusHex" => ("tarsus color hex", None),
+            "birdAttribute::broodPatch" => ("brood patch", None),
+            "birdAttribute::hasBursa" => ("bursa present", None),
+            "birdAttribute::fat" => ("fat score", None),
+            "birdAttribute::stomachContent" => ("stomach content", None),
+            "birdAttribute::testisRemark" => ("testis remarks", None),
+            "birdAttribute::ovaryAppearance" => ("ovary appearance", None),
+            "birdAttribute::oviductAppearance" => ("oviduct appearance", None),
+            "birdAttribute::ovaryRemark" => ("ovary remarks", None),
+            "birdAttribute::wingIsMolt" => ("wing molt present", None),
+            "birdAttribute::wingMolt" => ("wing molt", None),
+            "birdAttribute::tailIsMolt" => ("tail molt present", None),
+            "birdAttribute::tailMolt" => ("tail molt", None),
+            "birdAttribute::bodyMolt" => ("body molt", None),
+            "birdAttribute::moltRemark" => ("molt remarks", None),
+            "herpAttribute::weight" => ("weight", Some("g")),
+            "herpAttribute::svl" => ("snout-vent length", Some("cm")),
             "weather::lowestDayTempC" => ("lowest day temperature", Some("°C")),
             "weather::highestDayTempC" => ("highest day temperature", Some("°C")),
             "weather::lowestNightTempC" => ("lowest night temperature", Some("°C")),
@@ -396,7 +404,7 @@ impl DwcMapper {
         }
     }
 
-    fn map_mammal_measurement_column(column_name: &str) -> Option<&'static str> {
+    fn map_mammal_attribute_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "specimenUuid" => Some("dwc:occurrenceID"),
             "sex" => Some("dwc:sex"),
@@ -407,7 +415,7 @@ impl DwcMapper {
         }
     }
 
-    fn map_avian_measurement_column(column_name: &str) -> Option<&'static str> {
+    fn map_bird_attribute_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "specimenUuid" => Some("dwc:occurrenceID"),
             "sex" => Some("dwc:sex"),
@@ -525,12 +533,12 @@ mod tests {
             "specimenPart::count",
             "specimenPart::remark",
             "weather::notes",
-            "mammalMeasurement::sex",
-            "mammalMeasurement::age",
-            "mammalMeasurement::reproductiveStage",
-            "mammalMeasurement::remark",
-            "avianMeasurement::habitatRemark",
-            "avianMeasurement::specimenRemark",
+            "mammalAttribute::sex",
+            "mammalAttribute::age",
+            "mammalAttribute::reproductiveStage",
+            "mammalAttribute::remark",
+            "birdAttribute::habitatRemark",
+            "birdAttribute::specimenRemark",
         ];
 
         for source_key in source_keys {
@@ -583,7 +591,7 @@ mod tests {
 
     #[test]
     fn measurement_sources_expand_to_unsuffixed_measurement_or_fact_columns() {
-        let mapping = DwcMapper::get_dwc_mapping_for_source_key("mammalMeasurement::tailLength")
+        let mapping = DwcMapper::get_dwc_mapping_for_source_key("mammalAttribute::tailLength")
             .expect("tail length should be mapped");
         assert_eq!(
             mapping.headers,
@@ -595,6 +603,23 @@ mod tests {
         );
         assert_eq!(mapping.measurement_type, Some("tail length"));
         assert_eq!(mapping.measurement_unit, Some("mm"));
+    }
+
+    #[test]
+    fn legacy_attribute_names_resolve_to_the_canonical_mapping() {
+        for (legacy, canonical) in [
+            (
+                "mammalMeasurement::tailLength",
+                "mammalAttribute::tailLength",
+            ),
+            ("avianMeasurement::wingspan", "birdAttribute::wingspan"),
+            ("herpMeasurement::svl", "herpAttribute::svl"),
+        ] {
+            assert_eq!(
+                DwcMapper::get_dwc_mapping_for_source_key(legacy),
+                DwcMapper::get_dwc_mapping_for_source_key(canonical)
+            );
+        }
     }
 
     #[test]
