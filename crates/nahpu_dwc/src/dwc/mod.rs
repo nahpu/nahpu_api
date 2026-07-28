@@ -153,8 +153,12 @@ impl DwcMapper {
             "birdAttribute::irisHex" => ("iris color hex", None),
             "birdAttribute::billColor" => ("bill color", None),
             "birdAttribute::billHex" => ("bill color hex", None),
-            "birdAttribute::footColor" => ("foot color", None),
-            "birdAttribute::footHex" => ("foot color hex", None),
+            "birdAttribute::maxillaColor" => ("maxilla color", None),
+            "birdAttribute::maxillaHex" => ("maxilla color hex", None),
+            "birdAttribute::mandibleColor" => ("mandible color", None),
+            "birdAttribute::mandibleHex" => ("mandible color hex", None),
+            "birdAttribute::toeColor" | "birdAttribute::footColor" => ("toe color", None),
+            "birdAttribute::toeHex" | "birdAttribute::footHex" => ("toe color hex", None),
             "birdAttribute::tarsusColor" => ("tarsus color", None),
             "birdAttribute::tarsusHex" => ("tarsus color hex", None),
             "birdAttribute::broodPatch" => ("brood patch", None),
@@ -603,6 +607,30 @@ mod tests {
         );
         assert_eq!(mapping.measurement_type, Some("tail length"));
         assert_eq!(mapping.measurement_unit, Some("mm"));
+    }
+
+    #[test]
+    fn bird_beak_colors_are_measurement_or_fact_values() {
+        for (source_key, measurement_type) in [
+            ("birdAttribute::maxillaColor", "maxilla color"),
+            ("birdAttribute::maxillaHex", "maxilla color hex"),
+            ("birdAttribute::mandibleColor", "mandible color"),
+            ("birdAttribute::mandibleHex", "mandible color hex"),
+        ] {
+            let mapping = DwcMapper::get_dwc_mapping_for_source_key(source_key)
+                .expect("bird beak color should be mapped");
+            assert_eq!(mapping.measurement_type, Some(measurement_type));
+            assert_eq!(mapping.measurement_unit, None);
+        }
+    }
+
+    #[test]
+    fn legacy_foot_color_and_canonical_toe_color_share_a_mapping() {
+        for source_key in ["birdAttribute::toeColor", "birdAttribute::footColor"] {
+            let mapping = DwcMapper::get_dwc_mapping_for_source_key(source_key)
+                .expect("toe color should be mapped");
+            assert_eq!(mapping.measurement_type, Some("toe color"));
+        }
     }
 
     #[test]

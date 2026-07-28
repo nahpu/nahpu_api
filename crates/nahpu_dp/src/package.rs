@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use crate::FORMAT_VERSION;
 
-pub const NAHPU_TABLES: [&str; 21] = [
+pub const NAHPU_TABLES: [&str; 23] = [
     "project",
     "site",
     "coordinate",
@@ -29,6 +29,8 @@ pub const NAHPU_TABLES: [&str; 21] = [
     "siteMedia",
     "specimenMedia",
     "associatedData",
+    "specimenAssociatedData",
+    "siteAssociatedData",
     "personnelList",
     "personnel",
     "taxonomy",
@@ -39,6 +41,7 @@ pub const NAHPU_TABLES: [&str; 21] = [
     "specimenPart",
 ];
 
+const PROJECT_PATH: &str = "nahpu-project.json";
 const ENUM_MAPPING_PATH: &str = "mappings/sqlite_enums.csv";
 const VOCABULARY_SECTIONS: [&str; 3] = ["site", "events", "specimens"];
 const REQUIRED_VOCABULARIES: [(&str, &str); 6] = [
@@ -119,7 +122,7 @@ pub struct PackageRequest {
     pub user_config_schema_version: u32,
     #[serde(default)]
     pub dependencies: BTreeMap<String, String>,
-    pub database_path: String,
+    pub project_json: String,
     #[serde(default)]
     pub database_schema_path: Option<String>,
     pub user_configs: Value,
@@ -172,7 +175,10 @@ pub fn write_package_json(input_json: &str, output_path: &str) -> Result<String,
 }
 
 fn parse_request(input_json: &str) -> Result<PackageRequest, String> {
-    serde_json::from_str(input_json).map_err(|error| error.to_string())
+    let request: PackageRequest =
+        serde_json::from_str(input_json).map_err(|error| error.to_string())?;
+    parse_project_json(&request)?;
+    Ok(request)
 }
 
 fn validate_request(request: &PackageRequest) -> Vec<String> {
@@ -180,12 +186,7 @@ fn validate_request(request: &PackageRequest) -> Vec<String> {
     if request.name.trim().is_empty() {
         errors.push("Package name is required.".to_string());
     }
-    if !Path::new(&request.database_path).is_file() {
-        errors.push(format!(
-            "Database snapshot was not found: {}",
-            request.database_path
-        ));
-    }
+    validate_project_json(request, &mut errors);
 
     let names = request
         .tables
@@ -225,6 +226,11 @@ fn validate_request(request: &PackageRequest) -> Vec<String> {
         }
         if validate_package_path(Path::new(&file.package_path)).is_err() {
             errors.push(format!("Unsafe package file path: {}", file.package_path));
+        } else if is_sqlite_path(&file.package_path) {
+            errors.push(format!(
+                "SQLite files are not allowed in a NAHPU Data Package: {}",
+                file.package_path
+            ));
         }
     }
     errors
@@ -234,7 +240,13 @@ fn build_manifest(request: &PackageRequest) -> PackageManifest {
     let mut files = vec![
         metadata_file("datapackage.json", "application/json"),
         metadata_file("nahpu.toml", "application/toml"),
-        metadata_file("database/nahpu.sqlite3", "application/vnd.sqlite3"),
+        ManifestFile {
+            path: PROJECT_PATH.to_string(),
+            media_type: "application/json".to_string(),
+            records: project_record_count(request),
+            columns: Vec::new(),
+            bytes: None,
+        },
         metadata_file("configs/user_configs.json", "application/json"),
         ManifestFile {
             path: ENUM_MAPPING_PATH.to_string(),
@@ -275,7 +287,7 @@ fn build_manifest(request: &PackageRequest) -> PackageManifest {
             bytes: None,
         });
     }
-    let mut warnings = Vec::new();
+    let mut warnings = project_warnings(request);
     for file in &request.files {
         if Path::new(&file.source_path).is_file() {
             files.push(metadata_file(
@@ -309,16 +321,11 @@ fn write_package(request: &PackageRequest, output_path: &Path) -> Result<Package
     let staging = temporary_directory(parent, "nahpu-dp")?;
     let mut manifest = build_manifest(request);
     let result: Result<(), String> = (|| {
-        fs::create_dir_all(staging.join("database")).map_err(io_error)?;
         fs::create_dir_all(staging.join("tables")).map_err(io_error)?;
         fs::create_dir_all(staging.join("configs")).map_err(io_error)?;
         fs::create_dir_all(staging.join("mappings")).map_err(io_error)?;
         fs::create_dir_all(staging.join("vocabularies")).map_err(io_error)?;
-        fs::copy(
-            &request.database_path,
-            staging.join("database/nahpu.sqlite3"),
-        )
-        .map_err(io_error)?;
+        fs::write(staging.join(PROJECT_PATH), &request.project_json).map_err(io_error)?;
 
         let user_configs =
             serde_json::to_vec_pretty(&request.user_configs).map_err(|error| error.to_string())?;
@@ -458,12 +465,7 @@ fn data_package_json(request: &PackageRequest) -> Value {
         controlled_vocabulary_resource("site"),
         controlled_vocabulary_resource("events"),
         controlled_vocabulary_resource("specimens"),
-        simple_resource(
-            "nahpu-database",
-            "database/nahpu.sqlite3",
-            "sqlite3",
-            "application/vnd.sqlite3",
-        ),
+        simple_resource("nahpu-project", PROJECT_PATH, "json", "application/json"),
         simple_resource(
             "user-configs",
             "configs/user_configs.json",
@@ -625,7 +627,7 @@ fn simple_resource(name: &str, path: &str, format: &str, media_type: &str) -> Va
 
 fn nahpu_toml(request: &PackageRequest) -> String {
     let mut output = format!(
-        "format_name = \"NAHPU Data Package\"\nformat_version = \"{}\"\ncreated_at = \"{}\"\n\n[application]\nname = \"{}\"\nversion = \"{}\"\nbuild_number = \"{}\"\n\n[schemas]\ndatabase = {}\nuser_configs = {}\n\n[package]\ndescriptor = \"datapackage.json\"\ndatabase = \"database/nahpu.sqlite3\"\nuser_configs = \"configs/user_configs.json\"\nenum_mappings = \"{}\"\ntable_count = {}\nenum_mapping_count = {}\ncontrolled_vocabulary_count = {}\n\n[package.controlled_vocabularies]\nsite = \"{}\"\nevents = \"{}\"\nspecimens = \"{}\"\n\n[nahpu_api.dependencies]\n",
+        "format_name = \"NAHPU Data Package\"\nformat_version = \"{}\"\ncreated_at = \"{}\"\n\n[application]\nname = \"{}\"\nversion = \"{}\"\nbuild_number = \"{}\"\n\n[schemas]\ndatabase = {}\nuser_configs = {}\n\n[package]\ndescriptor = \"datapackage.json\"\nproject = \"{}\"\nuser_configs = \"configs/user_configs.json\"\nenum_mappings = \"{}\"\ntable_count = {}\nenum_mapping_count = {}\ncontrolled_vocabulary_count = {}\n\n[package.controlled_vocabularies]\nsite = \"{}\"\nevents = \"{}\"\nspecimens = \"{}\"\n\n[nahpu_api.dependencies]\n",
         FORMAT_VERSION,
         Utc::now().to_rfc3339(),
         toml_escape(&request.app_name),
@@ -633,6 +635,7 @@ fn nahpu_toml(request: &PackageRequest) -> String {
         toml_escape(&request.app_build),
         request.database_schema_version,
         request.user_config_schema_version,
+        PROJECT_PATH,
         ENUM_MAPPING_PATH,
         request.tables.len(),
         request.enum_mappings.len(),
@@ -680,16 +683,110 @@ fn verify_archive(format: ArchiveFormat, path: &Path, parent: &Path) -> Result<(
     };
     let descriptor_exists = output.join("datapackage.json").is_file();
     let manifest_exists = output.join("nahpu.toml").is_file();
+    let project_exists = output.join(PROJECT_PATH).is_file();
     let mappings_exist = output.join(ENUM_MAPPING_PATH).is_file();
     let vocabularies_exist = VOCABULARY_SECTIONS
         .iter()
         .all(|section| output.join(vocabulary_path(section)).is_file());
     let _ = fs::remove_dir_all(&output);
     result.map_err(io_error)?;
-    if !descriptor_exists || !manifest_exists || !mappings_exist || !vocabularies_exist {
+    if !descriptor_exists
+        || !manifest_exists
+        || !project_exists
+        || !mappings_exist
+        || !vocabularies_exist
+    {
         return Err("Package verification failed: required metadata is missing.".to_string());
     }
     Ok(())
+}
+
+fn parse_project_json(request: &PackageRequest) -> Result<Value, String> {
+    serde_json::from_str(&request.project_json)
+        .map_err(|error| format!("Invalid NAHPU project JSON: {error}"))
+}
+
+fn validate_project_json(request: &PackageRequest, errors: &mut Vec<String>) {
+    let Ok(project_json) = parse_project_json(request) else {
+        errors.push("NAHPU project JSON is invalid.".to_string());
+        return;
+    };
+    let Some(object) = project_json.as_object() else {
+        errors.push("NAHPU project JSON must be an object.".to_string());
+        return;
+    };
+    if object.get("nahpu_project").and_then(Value::as_str) != Some("project") {
+        errors.push("NAHPU project JSON has an invalid project marker.".to_string());
+    }
+    if !object.get("version").is_some_and(Value::is_number) {
+        errors.push("NAHPU project JSON is missing its format version.".to_string());
+    }
+    let Some(project) = object.get("project").and_then(Value::as_object) else {
+        errors.push("NAHPU project JSON is missing project information.".to_string());
+        return;
+    };
+    let Some(records) = object.get("records").and_then(Value::as_object) else {
+        errors.push("NAHPU project JSON is missing project records.".to_string());
+        return;
+    };
+
+    for table in &request.tables {
+        let expected = if table.name == "project" {
+            Value::Array(vec![Value::Object(project.clone())])
+        } else {
+            records
+                .get(&table.name)
+                .cloned()
+                .unwrap_or_else(|| Value::Array(Vec::new()))
+        };
+        let actual = serde_json::to_value(&table.rows).unwrap_or(Value::Null);
+        if actual != expected {
+            errors.push(format!(
+                "Table {} does not match nahpu-project.json.",
+                table.name
+            ));
+        }
+    }
+}
+
+fn project_record_count(request: &PackageRequest) -> usize {
+    let Ok(project_json) = parse_project_json(request) else {
+        return 0;
+    };
+    let records = project_json
+        .get("records")
+        .and_then(Value::as_object)
+        .map(|records| {
+            records
+                .values()
+                .filter_map(Value::as_array)
+                .map(Vec::len)
+                .sum::<usize>()
+        })
+        .unwrap_or_default();
+    records + usize::from(project_json.get("project").is_some_and(Value::is_object))
+}
+
+fn project_warnings(request: &PackageRequest) -> Vec<String> {
+    parse_project_json(request)
+        .ok()
+        .and_then(|project| project.get("warnings").and_then(Value::as_array).cloned())
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|warning| warning.as_str().map(ToString::to_string))
+        .collect()
+}
+
+fn is_sqlite_path(package_path: &str) -> bool {
+    Path::new(package_path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "db" | "sqlite" | "sqlite3"
+            )
+        })
 }
 
 fn validate_enum_mappings(request: &PackageRequest, errors: &mut Vec<String>) {
@@ -963,9 +1060,7 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    fn request(directory: &Path, archive_format: ArchiveFormat) -> PackageRequest {
-        let database = directory.join("nahpu.sqlite3");
-        fs::write(&database, b"sqlite fixture").unwrap();
+    fn request(_directory: &Path, archive_format: ArchiveFormat) -> PackageRequest {
         let tables = NAHPU_TABLES
             .iter()
             .map(|name| {
@@ -987,10 +1082,31 @@ mod tests {
                     name: (*name).to_string(),
                     columns,
                     foreign_keys: Vec::new(),
-                    rows: Vec::new(),
+                    rows: if *name == "project" {
+                        vec![BTreeMap::from([(
+                            "id".to_string(),
+                            Value::String("project-a".to_string()),
+                        )])]
+                    } else {
+                        Vec::new()
+                    },
                 }
             })
             .collect();
+        let records = NAHPU_TABLES
+            .iter()
+            .filter(|name| **name != "project")
+            .map(|name| ((*name).to_string(), Value::Array(Vec::new())))
+            .collect::<serde_json::Map<_, _>>();
+        let project_json = serde_json::to_string_pretty(&serde_json::json!({
+            "nahpu_project": "project",
+            "version": 4,
+            "project": {"id": "project-a"},
+            "records": records,
+            "media": [],
+            "warnings": ["Fixture warning"],
+        }))
+        .unwrap();
         PackageRequest {
             archive_format,
             name: "NAHPU test".to_string(),
@@ -1000,7 +1116,7 @@ mod tests {
             database_schema_version: 7,
             user_config_schema_version: 1,
             dependencies: BTreeMap::from([("nahpu_dp".to_string(), "0.1.0".to_string())]),
-            database_path: database.to_string_lossy().to_string(),
+            project_json,
             database_schema_path: None,
             user_configs: serde_json::json!({"schema_version": 1}),
             tables,
@@ -1067,6 +1183,43 @@ mod tests {
     }
 
     #[test]
+    fn rejects_tables_that_do_not_match_project_json() {
+        let directory = tempdir().unwrap();
+        let mut request = request(directory.path(), ArchiveFormat::Zip);
+        request
+            .tables
+            .iter_mut()
+            .find(|table| table.name == "site")
+            .unwrap()
+            .rows
+            .push(BTreeMap::from([("id".to_string(), Value::from(1))]));
+
+        let errors = validate_request(&request);
+
+        assert!(errors.contains(&"Table site does not match nahpu-project.json.".to_string()));
+    }
+
+    #[test]
+    fn rejects_sqlite_package_files() {
+        let directory = tempdir().unwrap();
+        let database = directory.path().join("legacy.sqlite3");
+        fs::write(&database, b"sqlite fixture").unwrap();
+        let mut request = request(directory.path(), ArchiveFormat::Zip);
+        request.files.push(PackageFile {
+            source_path: database.to_string_lossy().to_string(),
+            package_path: "database/legacy.sqlite3".to_string(),
+        });
+
+        let errors = validate_request(&request);
+
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("SQLite files are not allowed"))
+        );
+    }
+
+    #[test]
     fn writes_zip_and_tar_gzip_packages() {
         let directory = tempdir().unwrap();
         for format in [ArchiveFormat::Zip, ArchiveFormat::TarGzip] {
@@ -1087,7 +1240,11 @@ mod tests {
                     .unwrap(),
             }
             assert!(extracted.join("datapackage.json").is_file());
-            assert!(extracted.join("database/nahpu.sqlite3").is_file());
+            assert_eq!(
+                fs::read_to_string(extracted.join(PROJECT_PATH)).unwrap(),
+                request.project_json
+            );
+            assert!(!extracted.join("database/nahpu.sqlite3").exists());
             assert!(extracted.join("configs/user_configs.json").is_file());
             assert!(extracted.join(ENUM_MAPPING_PATH).is_file());
             for section in VOCABULARY_SECTIONS {
@@ -1104,6 +1261,7 @@ mod tests {
             assert!(site_vocabulary.contains("siteTypes,Site type,0,Site type value"));
             let metadata = fs::read_to_string(extracted.join("nahpu.toml")).unwrap();
             assert!(metadata.contains("database = 7"));
+            assert!(metadata.contains("project = \"nahpu-project.json\""));
             assert!(metadata.contains("user_configs = 1"));
             assert!(metadata.contains("enum_mappings = \"mappings/sqlite_enums.csv\""));
             assert!(metadata.contains("\"nahpu_dp\" = \"0.1.0\""));
@@ -1116,6 +1274,8 @@ mod tests {
                 .iter()
                 .filter_map(|resource| resource["path"].as_str())
                 .collect::<BTreeSet<_>>();
+            assert!(resource_paths.contains(PROJECT_PATH));
+            assert!(!resource_paths.contains("database/nahpu.sqlite3"));
             assert!(resource_paths.contains(ENUM_MAPPING_PATH));
             for section in VOCABULARY_SECTIONS {
                 assert!(resource_paths.contains(vocabulary_path(section).as_str()));

@@ -6,6 +6,36 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Independently transferable groups of NAHPU user configuration data.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum UserConfigSection {
+    UserConfigs,
+    RecordExportPresets,
+    TemplatePresets,
+    DocumentLayouts,
+    TemplateTablePreview,
+}
+
+impl UserConfigSection {
+    pub const ALL: [Self; 5] = [
+        Self::UserConfigs,
+        Self::RecordExportPresets,
+        Self::TemplatePresets,
+        Self::DocumentLayouts,
+        Self::TemplateTablePreview,
+    ];
+}
+
+fn default_user_config_sections() -> Vec<UserConfigSection> {
+    vec![
+        UserConfigSection::UserConfigs,
+        UserConfigSection::RecordExportPresets,
+        UserConfigSection::TemplatePresets,
+        UserConfigSection::DocumentLayouts,
+    ]
+}
+
 /// Represents a combined export field configuration.
 ///
 /// It holds a single ID representing a group of fields that are combined
@@ -121,6 +151,15 @@ fn default_record_type() -> String {
     "specimen".to_string()
 }
 
+/// Direction used to order records within a document layout block.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DocumentSortDirection {
+    #[default]
+    Ascending,
+    Descending,
+}
+
 /// Represents a layout block within a document.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DocumentLayoutBlock {
@@ -140,6 +179,10 @@ pub struct DocumentLayoutBlock {
     pub template_pad_bottom_mm: f64,
     #[serde(alias = "pageBreakAfter")]
     pub page_break_after: bool,
+    #[serde(alias = "sortField", default)]
+    pub sort_field: Option<String>,
+    #[serde(alias = "sortDirection", default)]
+    pub sort_direction: DocumentSortDirection,
 }
 
 fn default_multi_block_mode() -> String {
@@ -192,6 +235,12 @@ pub struct UserConfigsExport {
     /// Version of the serialized user configuration contract.
     #[serde(default)]
     pub schema_version: u32,
+    /// Sections intentionally included in this transfer.
+    ///
+    /// Older JSON exports omit this field and are interpreted as complete
+    /// backups containing every section.
+    #[serde(default = "default_user_config_sections")]
+    pub included_sections: Vec<UserConfigSection>,
     /// Map of configuration keys to their values.
     pub configs: HashMap<String, serde_json::Value>,
     /// List of record export presets.
@@ -201,4 +250,55 @@ pub struct UserConfigsExport {
     /// List of document layouts.
     #[serde(default)]
     pub document_layouts: Vec<DocumentLayoutPreset>,
+    /// Ordered columns shown in specimen template-table previews.
+    #[serde(default)]
+    pub template_table_preview_columns: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn legacy_exports_default_to_sections_available_in_that_schema() {
+        let export: UserConfigsExport = serde_json::from_value(json!({
+            "schema_version": 1,
+            "configs": {},
+            "record_export_presets": [],
+            "template_presets": [],
+            "document_layouts": [],
+        }))
+        .unwrap();
+
+        assert_eq!(
+            export.included_sections,
+            vec![
+                UserConfigSection::UserConfigs,
+                UserConfigSection::RecordExportPresets,
+                UserConfigSection::TemplatePresets,
+                UserConfigSection::DocumentLayouts,
+            ]
+        );
+        assert!(export.template_table_preview_columns.is_empty());
+    }
+
+    #[test]
+    fn legacy_layout_blocks_default_to_original_ascending_order() {
+        let block: DocumentLayoutBlock = serde_json::from_value(json!({
+            "templateName": "Specimen",
+            "templateCount": 1,
+            "rows": 1,
+            "cols": 1,
+            "templatePadTopMm": 0.0,
+            "templatePadLeftMm": 0.0,
+            "templatePadRightMm": 0.0,
+            "templatePadBottomMm": 0.0,
+            "pageBreakAfter": false
+        }))
+        .unwrap();
+
+        assert_eq!(block.sort_field, None);
+        assert_eq!(block.sort_direction, DocumentSortDirection::Ascending);
+    }
 }

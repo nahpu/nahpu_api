@@ -5,7 +5,7 @@
 
 use crate::models::{
     ConfigExportPreset, ConfigPresetEntry, DocumentLayoutPreset, DocumentLayoutStatus,
-    TemplatePresetDeletionResult, TemplatePresetEntry, TemplatePresetUsage,
+    TemplatePresetDeletionResult, TemplatePresetEntry, TemplatePresetUsage, UserConfigSection,
 };
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use std::sync::OnceLock;
@@ -15,6 +15,9 @@ const RECORD_EXPORT_PRESETS: TableDefinition<&str, &[u8]> =
     TableDefinition::new("record_export_presets");
 const TEMPLATE_PRESETS: TableDefinition<&str, &[u8]> = TableDefinition::new("template_presets");
 const DOCUMENT_LAYOUTS: TableDefinition<&str, &[u8]> = TableDefinition::new("document_layouts");
+const TEMPLATE_TABLE_PREVIEW: TableDefinition<&str, &[u8]> =
+    TableDefinition::new("template_table_preview");
+const SPECIMEN_COLUMNS_KEY: &str = "specimen_columns";
 
 static INSTANCE: OnceLock<ConfigDb> = OnceLock::new();
 
@@ -56,6 +59,9 @@ impl ConfigDb {
                 .map_err(|e| e.to_string())?;
             let _table4 = write_txn
                 .open_table(DOCUMENT_LAYOUTS)
+                .map_err(|e| e.to_string())?;
+            let _table5 = write_txn
+                .open_table(TEMPLATE_TABLE_PREVIEW)
                 .map_err(|e| e.to_string())?;
         }
         write_txn.commit().map_err(|e| e.to_string())?;
@@ -121,6 +127,35 @@ impl ConfigDb {
         }
         write_txn.commit().map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    /// Saves the ordered columns used by specimen template-table previews.
+    pub fn set_template_table_preview_columns(&self, columns: &[String]) -> Result<(), String> {
+        let bytes = serde_json::to_vec(columns).map_err(|e| e.to_string())?;
+        let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
+        {
+            let mut table = write_txn
+                .open_table(TEMPLATE_TABLE_PREVIEW)
+                .map_err(|e| e.to_string())?;
+            table
+                .insert(SPECIMEN_COLUMNS_KEY, bytes.as_slice())
+                .map_err(|e| e.to_string())?;
+        }
+        write_txn.commit().map_err(|e| e.to_string())
+    }
+
+    /// Retrieves the ordered columns used by specimen template-table previews.
+    pub fn get_template_table_preview_columns(&self) -> Result<Option<Vec<String>>, String> {
+        let read_txn = self.database.begin_read().map_err(|e| e.to_string())?;
+        let table = read_txn
+            .open_table(TEMPLATE_TABLE_PREVIEW)
+            .map_err(|e| e.to_string())?;
+        match table.get(SPECIMEN_COLUMNS_KEY).map_err(|e| e.to_string())? {
+            Some(value) => serde_json::from_slice(value.value())
+                .map(Some)
+                .map_err(|e| e.to_string()),
+            None => Ok(None),
+        }
     }
 
     /// Saves a record export preset configuration.
@@ -501,96 +536,180 @@ impl ConfigDb {
         Ok(statuses)
     }
 
-    /// Exports all user configs, record export presets, and template presets from the database.
+    /// Exports every user configuration section from the database.
     pub fn export_configs(&self) -> Result<crate::models::UserConfigsExport, String> {
-        let configs = self.get_all_user_configs()?;
-        let record_export_presets = self.get_all_record_export_presets()?;
-        let template_presets = self.get_all_template_presets()?;
-        let document_layouts = self.get_all_document_layouts()?;
+        self.export_selected_configs(&UserConfigSection::ALL)
+    }
+
+    /// Exports only the requested user configuration sections.
+    pub fn export_selected_configs(
+        &self,
+        sections: &[UserConfigSection],
+    ) -> Result<crate::models::UserConfigsExport, String> {
+        let sections = unique_sections(sections);
+        if sections.is_empty() {
+            return Err("Select at least one user configuration section".to_string());
+        }
+
+        let configs = if sections.contains(&UserConfigSection::UserConfigs) {
+            self.get_all_user_configs()?
+        } else {
+            Default::default()
+        };
+        let record_export_presets = if sections.contains(&UserConfigSection::RecordExportPresets) {
+            self.get_all_record_export_presets()?
+        } else {
+            Vec::new()
+        };
+        let template_presets = if sections.contains(&UserConfigSection::TemplatePresets) {
+            self.get_all_template_presets()?
+        } else {
+            Vec::new()
+        };
+        let document_layouts = if sections.contains(&UserConfigSection::DocumentLayouts) {
+            self.get_all_document_layouts()?
+        } else {
+            Vec::new()
+        };
+        let template_table_preview_columns =
+            if sections.contains(&UserConfigSection::TemplateTablePreview) {
+                self.get_template_table_preview_columns()?
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
         Ok(crate::models::UserConfigsExport {
             schema_version: crate::USER_CONFIG_SCHEMA_VERSION,
+            included_sections: sections,
             configs,
             record_export_presets,
             template_presets,
             document_layouts,
+            template_table_preview_columns,
         })
     }
 
-    /// Imports and replaces all user configs, record export presets, and template presets.
+    /// Imports and replaces every user configuration section.
     pub fn import_configs(&self, export: crate::models::UserConfigsExport) -> Result<(), String> {
-        // Clear existing record export presets first
-        let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
+        let sections = export.included_sections.clone();
+        self.import_selected_configs(export, &sections)
+    }
+
+    /// Atomically replaces only the requested sections from an export.
+    pub fn import_selected_configs(
+        &self,
+        export: crate::models::UserConfigsExport,
+        sections: &[UserConfigSection],
+    ) -> Result<(), String> {
+        let sections = unique_sections(sections);
+        if sections.is_empty() {
+            return Err("Select at least one user configuration section".to_string());
+        }
+        if let Some(section) = sections
+            .iter()
+            .find(|section| !export.included_sections.contains(section))
         {
+            return Err(format!("The transfer does not include section {section:?}"));
+        }
+
+        let configs = export
+            .configs
+            .into_iter()
+            .map(|(key, value)| {
+                serde_json::to_vec(&value)
+                    .map(|bytes| (key, bytes))
+                    .map_err(|error| error.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let record_export_presets = export
+            .record_export_presets
+            .into_iter()
+            .map(|entry| {
+                serde_json::to_vec(&entry.preset)
+                    .map(|bytes| (entry.name, bytes))
+                    .map_err(|error| error.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let template_presets = export
+            .template_presets
+            .into_iter()
+            .map(|entry| {
+                serde_json::to_vec(&entry.value)
+                    .map(|bytes| (entry.name, bytes))
+                    .map_err(|error| error.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let document_layouts = export
+            .document_layouts
+            .into_iter()
+            .map(|entry| {
+                serde_json::to_vec(&entry)
+                    .map(|bytes| (entry.name, bytes))
+                    .map_err(|error| error.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let template_table_preview_columns =
+            serde_json::to_vec(&export.template_table_preview_columns)
+                .map_err(|error| error.to_string())?;
+
+        let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
+        if sections.contains(&UserConfigSection::UserConfigs) {
+            let mut table = write_txn
+                .open_table(USER_CONFIGS)
+                .map_err(|e| e.to_string())?;
+            clear_table(&mut table)?;
+            for (key, bytes) in &configs {
+                table
+                    .insert(key.as_str(), bytes.as_slice())
+                    .map_err(|e| e.to_string())?;
+            }
+        }
+        if sections.contains(&UserConfigSection::RecordExportPresets) {
             let mut table = write_txn
                 .open_table(RECORD_EXPORT_PRESETS)
                 .map_err(|e| e.to_string())?;
-            let keys: Vec<String> = table
-                .iter()
-                .map_err(|e| e.to_string())?
-                .filter_map(|r| r.ok().map(|(k, _)| k.value().to_string()))
-                .collect();
-            for k in keys {
-                table.remove(k.as_str()).map_err(|e| e.to_string())?;
+            clear_table(&mut table)?;
+            for (name, bytes) in &record_export_presets {
+                table
+                    .insert(name.as_str(), bytes.as_slice())
+                    .map_err(|e| e.to_string())?;
             }
         }
-        write_txn.commit().map_err(|e| e.to_string())?;
-
-        // Clear existing template presets
-        let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
-        {
+        if sections.contains(&UserConfigSection::TemplatePresets) {
             let mut table = write_txn
                 .open_table(TEMPLATE_PRESETS)
                 .map_err(|e| e.to_string())?;
-            let keys: Vec<String> = table
-                .iter()
-                .map_err(|e| e.to_string())?
-                .filter_map(|r| r.ok().map(|(k, _)| k.value().to_string()))
-                .collect();
-            for k in keys {
-                table.remove(k.as_str()).map_err(|e| e.to_string())?;
+            clear_table(&mut table)?;
+            for (name, bytes) in &template_presets {
+                table
+                    .insert(name.as_str(), bytes.as_slice())
+                    .map_err(|e| e.to_string())?;
             }
         }
-        write_txn.commit().map_err(|e| e.to_string())?;
-
-        // Clear existing document layouts
-        let write_txn = self.database.begin_write().map_err(|e| e.to_string())?;
-        {
+        if sections.contains(&UserConfigSection::DocumentLayouts) {
             let mut table = write_txn
                 .open_table(DOCUMENT_LAYOUTS)
                 .map_err(|e| e.to_string())?;
-            let keys: Vec<String> = table
-                .iter()
-                .map_err(|e| e.to_string())?
-                .filter_map(|r| r.ok().map(|(k, _)| k.value().to_string()))
-                .collect();
-            for k in keys {
-                table.remove(k.as_str()).map_err(|e| e.to_string())?;
+            clear_table(&mut table)?;
+            for (name, bytes) in &document_layouts {
+                table
+                    .insert(name.as_str(), bytes.as_slice())
+                    .map_err(|e| e.to_string())?;
             }
         }
-        write_txn.commit().map_err(|e| e.to_string())?;
-
-        // Import new configs
-        for (key, val) in export.configs {
-            let bytes = serde_json::to_vec(&val).map_err(|e| e.to_string())?;
-            self.set_user_config_bytes(&key, &bytes)?;
+        if sections.contains(&UserConfigSection::TemplateTablePreview) {
+            let mut table = write_txn
+                .open_table(TEMPLATE_TABLE_PREVIEW)
+                .map_err(|e| e.to_string())?;
+            clear_table(&mut table)?;
+            table
+                .insert(
+                    SPECIMEN_COLUMNS_KEY,
+                    template_table_preview_columns.as_slice(),
+                )
+                .map_err(|e| e.to_string())?;
         }
-
-        // Import new record export presets
-        for entry in export.record_export_presets {
-            self.set_record_export_preset(&entry.name, &entry.preset)?;
-        }
-
-        // Import new template presets
-        for entry in export.template_presets {
-            self.set_template_preset(&entry.name, &entry.value)?;
-        }
-
-        // Import new document layouts
-        for entry in export.document_layouts {
-            self.set_document_layout(&entry.name, &entry)?;
-        }
-
-        Ok(())
+        write_txn.commit().map_err(|e| e.to_string())
     }
 
     /// Helper to get all user configs from the database.
@@ -632,6 +751,29 @@ impl ConfigDb {
     }
 }
 
+fn unique_sections(sections: &[UserConfigSection]) -> Vec<UserConfigSection> {
+    UserConfigSection::ALL
+        .into_iter()
+        .filter(|section| sections.contains(section))
+        .collect()
+}
+
+fn clear_table(table: &mut redb::Table<'_, &str, &[u8]>) -> Result<(), String> {
+    let keys = table
+        .iter()
+        .map_err(|e| e.to_string())?
+        .map(|entry| {
+            entry
+                .map(|(key, _)| key.value().to_string())
+                .map_err(|e| e.to_string())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for key in keys {
+        table.remove(key.as_str()).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn template_record_type(template: &serde_json::Value) -> String {
     template
         .get("recordType")
@@ -643,10 +785,98 @@ fn template_record_type(template: &serde_json::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{DocumentLayoutBlock, DocumentLayoutPreset};
+    use crate::models::{
+        DocumentLayoutBlock, DocumentLayoutPreset, DocumentSortDirection, UserConfigSection,
+        UserConfigsExport,
+    };
+    use serde_json::json;
     use std::sync::Mutex;
 
     static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn selected_import_replaces_only_requested_sections() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        let mut db_path = std::env::temp_dir();
+        db_path.push(format!(
+            "test_config_selected_import_{}.redb",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        ConfigDb::init(db_path.to_str().unwrap()).unwrap();
+        let db = ConfigDb::get_instance().unwrap();
+        db.set_user_config_string("old_config", "old").unwrap();
+        db.set_template_preset("preserved", &json!({"name": "preserved"}))
+            .unwrap();
+
+        let export = UserConfigsExport {
+            schema_version: crate::USER_CONFIG_SCHEMA_VERSION,
+            included_sections: vec![UserConfigSection::UserConfigs],
+            configs: [("new_config".to_string(), json!("new"))]
+                .into_iter()
+                .collect(),
+            record_export_presets: vec![],
+            template_presets: vec![],
+            document_layouts: vec![],
+            template_table_preview_columns: vec![],
+        };
+        db.import_selected_configs(export, &[UserConfigSection::UserConfigs])
+            .unwrap();
+
+        assert_eq!(db.get_user_config_string("old_config").unwrap(), None);
+        assert_eq!(
+            db.get_user_config_string("new_config").unwrap(),
+            Some("new".to_string())
+        );
+        assert!(db.get_template_preset("preserved").unwrap().is_some());
+    }
+
+    #[test]
+    fn template_table_preview_columns_round_trip_as_an_independent_section() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        let mut db_path = std::env::temp_dir();
+        db_path.push(format!(
+            "test_template_preview_columns_{}.redb",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        ConfigDb::init(db_path.to_str().unwrap()).unwrap();
+        let db = ConfigDb::get_instance().unwrap();
+        let original = vec![
+            "specimen::fieldNumber".to_string(),
+            "taxonomy::species".to_string(),
+        ];
+        db.set_template_table_preview_columns(&original).unwrap();
+        db.set_user_config_string("preview_preserved", "yes")
+            .unwrap();
+
+        let export = db
+            .export_selected_configs(&[UserConfigSection::TemplateTablePreview])
+            .unwrap();
+        assert_eq!(
+            export.included_sections,
+            vec![UserConfigSection::TemplateTablePreview]
+        );
+        assert_eq!(export.template_table_preview_columns, original);
+
+        db.set_template_table_preview_columns(&["site::siteID".to_string()])
+            .unwrap();
+        db.import_selected_configs(export, &[UserConfigSection::TemplateTablePreview])
+            .unwrap();
+
+        assert_eq!(
+            db.get_template_table_preview_columns().unwrap(),
+            Some(original)
+        );
+        assert_eq!(
+            db.get_user_config_string("preview_preserved").unwrap(),
+            Some("yes".to_string())
+        );
+    }
 
     #[test]
     fn test_document_layout_crud() {
@@ -674,6 +904,8 @@ mod tests {
             template_pad_right_mm: 1.0,
             template_pad_bottom_mm: 1.0,
             page_break_after: false,
+            sort_field: None,
+            sort_direction: DocumentSortDirection::Ascending,
         };
 
         let layout = DocumentLayoutPreset {
@@ -764,6 +996,8 @@ mod tests {
                     template_pad_right_mm: 0.0,
                     template_pad_bottom_mm: 0.0,
                     page_break_after: false,
+                    sort_field: None,
+                    sort_direction: DocumentSortDirection::Ascending,
                 },
                 DocumentLayoutBlock {
                     template_name: target_name.clone(),
@@ -775,6 +1009,8 @@ mod tests {
                     template_pad_right_mm: 0.0,
                     template_pad_bottom_mm: 0.0,
                     page_break_after: false,
+                    sort_field: None,
+                    sort_direction: DocumentSortDirection::Ascending,
                 },
             ],
             fill_page: false,
