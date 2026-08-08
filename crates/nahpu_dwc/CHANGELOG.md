@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Audit schema v17 mappings against current Darwin Core and Dublin Core terms.
+- Add verbatim coordinate, determiner, agent, taxonomy, herpetofauna, fossil,
+  parasite, associated-data, and relationship mappings.
+- Add row-level measurement unit sources for mammal, bird, and herpetofauna
+  weights.
+- Keep semantically unmatched NAHPU fields out of forced Darwin Core mappings.
+
 ## 0.3.0
 
 - Map the canonical mammal, bird, and herpetofauna attribute namespaces.

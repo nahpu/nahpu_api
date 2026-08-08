@@ -40,8 +40,8 @@ mod tests {
 
         let result = export::json::convert_to_dwc_json("project", &project).unwrap();
 
-        assert_eq!(result["dcterms:identifier"], json!("1234-5678"));
-        assert_eq!(result["dwc:datasetName"], json!("My Project"));
+        assert_eq!(result["dwc:projectID"], json!("1234-5678"));
+        assert_eq!(result["dwc:projectTitle"], json!("My Project"));
         assert_eq!(result["unmappedField"], json!("Data")); // Falls back to original camelCase name
         assert!(result.get("nullField").is_none()); // Nulls are excluded
     }

@@ -16,6 +16,7 @@ pub struct DwcMapping {
     pub headers: Vec<&'static str>,
     pub measurement_type: Option<&'static str>,
     pub measurement_unit: Option<&'static str>,
+    pub measurement_unit_source: Option<&'static str>,
 }
 
 impl DwcMapper {
@@ -25,6 +26,7 @@ impl DwcMapper {
         match table_name {
             "project" => Self::map_project_column(column_name),
             "site" => Self::map_site_column(column_name),
+            "fossilSite" => Self::map_fossil_site_column(column_name),
             "coordinate" => Self::map_coordinate_column(column_name),
             "collEvent" => Self::map_coll_event_column(column_name),
             "collPersonnel" => Self::map_coll_personnel_column(column_name),
@@ -43,6 +45,15 @@ impl DwcMapper {
             "weather" => Self::map_weather_column(column_name),
             "mammalAttribute" => Self::map_mammal_attribute_column(column_name),
             "birdAttribute" => Self::map_bird_attribute_column(column_name),
+            "herpAttribute" => Self::map_herp_attribute_column(column_name),
+            "arthropodAttribute" => Self::map_arthropod_attribute_column(column_name),
+            "fossilAttribute" => Self::map_fossil_attribute_column(column_name),
+            "parasiteDetection" => Self::map_parasite_detection_column(column_name),
+            "parasite" => Self::map_parasite_column(column_name),
+            "eventMedia" => Self::map_event_media_column(column_name),
+            "eventAssociatedData" => Self::map_event_associated_data_column(column_name),
+            "siteAssociatedData" => Self::map_site_associated_data_column(column_name),
+            "specimenAssociatedData" => Self::map_specimen_associated_data_column(column_name),
             _ => None,
         }
     }
@@ -81,21 +92,25 @@ impl DwcMapper {
                 ],
                 measurement_type: None,
                 measurement_unit: None,
+                measurement_unit_source: None,
             }),
             "specimenPart::type" => Some(DwcMapping {
                 headers: vec!["dwc:materialEntityType", "dwc:objectQuantityType"],
                 measurement_type: None,
                 measurement_unit: None,
+                measurement_unit_source: None,
             }),
             "specimenPart::count" => Some(DwcMapping {
                 headers: vec!["dwc:objectQuantity"],
                 measurement_type: None,
                 measurement_unit: None,
+                measurement_unit_source: None,
             }),
             _ => Self::get_dwc_term_for_source_key(source_key).map(|header| DwcMapping {
                 headers: vec![header],
                 measurement_type: None,
                 measurement_unit: None,
+                measurement_unit_source: None,
             }),
         }
     }
@@ -177,6 +192,21 @@ impl DwcMapper {
             "birdAttribute::moltRemark" => ("molt remarks", None),
             "herpAttribute::weight" => ("weight", Some("g")),
             "herpAttribute::svl" => ("snout-vent length", Some("cm")),
+            "arthropodAttribute::headWidth" => ("head width", None),
+            "arthropodAttribute::bodyLength" => ("body length", None),
+            "arthropodAttribute::wingspanUpper" => ("upper wingspan", None),
+            "arthropodAttribute::wingspanLower" => ("lower wingspan", None),
+            "arthropodAttribute::hostPart" => ("host part", None),
+            "arthropodAttribute::canopyAffinity" => ("canopy affinity", None),
+            "arthropodAttribute::canopyCover" => ("canopy cover", None),
+            "arthropodAttribute::ambientTemperature" => ("ambient temperature", None),
+            "arthropodAttribute::ambientHumidity" => ("ambient humidity", None),
+            "arthropodAttribute::waterTemperature" => ("water temperature", None),
+            "arthropodAttribute::pH" => ("pH", None),
+            "arthropodAttribute::dissolvedOxygen" => ("dissolved oxygen", None),
+            "arthropodAttribute::flowVelocity" => ("flow velocity", None),
+            "parasiteDetection::parasiteExamined" => ("parasites examined", None),
+            "parasiteDetection::parasiteDetected" => ("parasites detected", None),
             "weather::lowestDayTempC" => ("lowest day temperature", Some("°C")),
             "weather::highestDayTempC" => ("highest day temperature", Some("°C")),
             "weather::lowestNightTempC" => ("lowest night temperature", Some("°C")),
@@ -196,14 +226,19 @@ impl DwcMapper {
             ],
             measurement_type: Some(measurement_type),
             measurement_unit,
+            measurement_unit_source: match source_key {
+                "mammalAttribute::weight" => Some("mammalAttribute::weightUnit"),
+                "birdAttribute::weight" => Some("birdAttribute::weightUnit"),
+                "herpAttribute::weight" => Some("herpAttribute::weightUnit"),
+                _ => None,
+            },
         })
     }
 
     fn map_project_column(column_name: &str) -> Option<&'static str> {
         match column_name {
-            "uuid" => Some("dcterms:identifier"),
-            "name" => Some("dwc:datasetName"),
-            "startDate" | "endDate" => Some("dwc:eventDate"),
+            "uuid" => Some("dwc:projectID"),
+            "name" => Some("dwc:projectTitle"),
             "created" => Some("dcterms:created"),
             "lastAccessed" => Some("dcterms:modified"),
             _ => None,
@@ -212,9 +247,8 @@ impl DwcMapper {
 
     fn map_site_column(column_name: &str) -> Option<&'static str> {
         match column_name {
-            "siteID" | "siteId" => Some("dwc:siteNumber"),
+            "siteID" | "siteId" => Some("dwc:locationID"),
             "projectUuid" => Some("dwc:datasetID"),
-            "siteType" => Some("dwc:locationRemarks"),
             "country" => Some("dwc:country"),
             "stateProvince" => Some("dwc:stateProvince"),
             "county" => Some("dwc:county"),
@@ -226,11 +260,26 @@ impl DwcMapper {
         }
     }
 
+    fn map_fossil_site_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "siteID" | "siteId" => Some("dwc:locationID"),
+            "formation" => Some("dwc:formation"),
+            "narrowerGeologicStage" => Some("dwc:latestAgeOrHighestStage"),
+            "broaderGeologicStage" => Some("dwc:earliestAgeOrLowestStage"),
+            _ => None,
+        }
+    }
+
     fn map_coordinate_column(column_name: &str) -> Option<&'static str> {
         match column_name {
+            "nameId" => Some("dwc:locationID"),
             "siteID" | "siteId" => Some("dwc:locationID"),
             "decimalLatitude" => Some("dwc:decimalLatitude"),
             "decimalLongitude" => Some("dwc:decimalLongitude"),
+            "verbatimLatitude" => Some("dwc:verbatimLatitude"),
+            "verbatimLongitude" => Some("dwc:verbatimLongitude"),
+            "verbatimCoordinates" => Some("dwc:verbatimCoordinates"),
+            "verbatimCoordinateSystem" => Some("dwc:verbatimCoordinateSystem"),
             "elevationInMeter" => Some("dwc:minimumElevationInMeters"),
             "datum" => Some("dwc:geodeticDatum"),
             "uncertaintyInMeters" => Some("dwc:coordinateUncertaintyInMeters"),
@@ -265,7 +314,7 @@ impl DwcMapper {
     fn map_coll_effort_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "eventID" | "eventId" => Some("dwc:eventID"),
-            "method" | "brand" => Some("dwc:samplingProtocol"),
+            "method" => Some("dwc:samplingProtocol"),
             "notes" => Some("dwc:samplingEffort"),
             _ => None,
         }
@@ -291,6 +340,7 @@ impl DwcMapper {
             "camera" | "lenses" | "additionalExif" => Some("dcterms:description"),
             "personnelId" => Some("dcterms:creator"),
             "fileName" => Some("dcterms:title"),
+            "uri" => Some("dcterms:identifier"),
             "caption" => Some("dcterms:description"),
             _ => None,
         }
@@ -298,19 +348,21 @@ impl DwcMapper {
 
     fn map_associated_data_column(column_name: &str) -> Option<&'static str> {
         match column_name {
-            "specimenUuid" => Some("dwc:occurrenceID"),
+            "primaryId" => Some("dcterms:identifier"),
+            "projectUuid" => Some("dwc:datasetID"),
             "name" => Some("dcterms:title"),
             "type" => Some("dcterms:type"),
             "date" => Some("dcterms:created"),
             "description" => Some("dcterms:description"),
-            "url" => Some("dcterms:identifier"),
+            "uri" | "url" => Some("dcterms:identifier"),
             _ => None,
         }
     }
 
     fn map_personnel_column(column_name: &str) -> Option<&'static str> {
         match column_name {
-            "uuid" => Some("dcterms:identifier"),
+            "uuid" | "orcid" => Some("dwc:agentID"),
+            "notes" => Some("dwc:agentRemarks"),
             _ => None,
         }
     }
@@ -319,10 +371,14 @@ impl DwcMapper {
         match column_name {
             "id" => Some("dwc:taxonID"),
             "taxonClass" => Some("dwc:class"),
+            "taxonRank" => Some("dwc:taxonRank"),
+            "kingdom" => Some("dwc:kingdom"),
+            "phylum" => Some("dwc:phylum"),
             "taxonOrder" => Some("dwc:order"),
             "taxonFamily" => Some("dwc:family"),
             "genus" => Some("dwc:genus"),
             "specificEpithet" => Some("dwc:specificEpithet"),
+            "subspecificEpithet" => Some("dwc:infraspecificEpithet"),
             "authors" => Some("dwc:scientificNameAuthorship"),
             "commonName" => Some("dwc:vernacularName"),
             "notes" => Some("dwc:taxonRemarks"),
@@ -337,6 +393,7 @@ impl DwcMapper {
             "speciesID" | "speciesId" => Some("dwc:taxonID"),
             "scientificName" => Some("dwc:scientificName"),
             "iDMethod" => Some("dwc:identificationType"),
+            "iDConfidence" => Some("dwc:identificationVerificationStatus"),
             "taxonGroup" => Some("dwc:higherClassification"),
             "collectionDate" | "captureDate" => Some("dwc:eventDate"),
             "collectionTime" | "captureTime" => Some("dwc:eventTime"),
@@ -344,13 +401,11 @@ impl DwcMapper {
                 Some("dwc:samplingProtocol")
             }
             "coordinateID" | "coordinateId" => Some("dwc:locationID"),
-            "catalogerID" | "catalogerId" | "collPersonnelID" | "collPersonnelId" => {
-                Some("dwc:recordedBy")
-            }
+            "collPersonnelID" | "collPersonnelId" => Some("dwc:recordedByID"),
+            "determiner" => Some("dwc:identifiedBy"),
+            "determinerID" | "determinerId" => Some("dwc:identifiedByID"),
             "fieldNumber" => Some("dwc:recordNumber"),
             "collEventID" | "collEventId" => Some("dwc:eventID"),
-            "museumID" | "museumId" => Some("dwc:institutionCode"),
-            "preparatorID" | "preparatorId" => Some("dwc:recordedBy"),
             _ => None,
         }
     }
@@ -395,7 +450,7 @@ impl DwcMapper {
     fn map_personnel_list_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "projectUuid" => Some("dwc:datasetID"),
-            "personnelUuid" => Some("dcterms:identifier"),
+            "personnelUuid" => Some("dwc:agentID"),
             _ => None,
         }
     }
@@ -428,6 +483,92 @@ impl DwcMapper {
             _ => None,
         }
     }
+
+    fn map_herp_attribute_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "specimenUuid" => Some("dwc:occurrenceID"),
+            "sex" => Some("dwc:sex"),
+            "age" => Some("dwc:lifeStage"),
+            "remark" => Some("dwc:occurrenceRemarks"),
+            _ => None,
+        }
+    }
+
+    fn map_arthropod_attribute_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "specimenUuid" => Some("dwc:occurrenceID"),
+            "sex" => Some("dwc:sex"),
+            "hostOrganism" => Some("dwc:associatedTaxa"),
+            "remark" => Some("dwc:occurrenceRemarks"),
+            _ => None,
+        }
+    }
+
+    fn map_fossil_attribute_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "specimenUuid" => Some("dwc:occurrenceID"),
+            "fossilType" => Some("dwc:materialEntityType"),
+            "specimenDescription" => Some("dwc:materialEntityRemarks"),
+            _ => None,
+        }
+    }
+
+    fn map_parasite_detection_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "specimenUuid" => Some("dwc:occurrenceID"),
+            "detectionRemark" => Some("dwc:occurrenceRemarks"),
+            _ => None,
+        }
+    }
+
+    fn map_parasite_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "specimenUuid" => Some("dwc:occurrenceID"),
+            "speciesID" | "speciesId" => Some("dwc:taxonID"),
+            "identifierID" | "identifierId" => Some("dwc:identifiedByID"),
+            "parasiteUuid" => Some("dwc:organismID"),
+            "count" => Some("dwc:organismQuantity"),
+            "preparationMethod" | "treatment" => Some("dwc:preparations"),
+            "lifeStage" => Some("dwc:lifeStage"),
+            "dateCollected" => Some("dwc:eventDate"),
+            "timeCollected" => Some("dwc:eventTime"),
+            "detectionMethod" => Some("dwc:samplingProtocol"),
+            "remark" => Some("dwc:occurrenceRemarks"),
+            _ => None,
+        }
+    }
+
+    fn map_event_media_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "eventID" | "eventId" => Some("dwc:eventID"),
+            "mediaId" => Some("dcterms:identifier"),
+            _ => None,
+        }
+    }
+
+    fn map_event_associated_data_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "eventID" | "eventId" => Some("dwc:eventID"),
+            "associatedDataId" => Some("dcterms:identifier"),
+            _ => None,
+        }
+    }
+
+    fn map_site_associated_data_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "siteId" => Some("dwc:locationID"),
+            "associatedDataId" => Some("dcterms:identifier"),
+            _ => None,
+        }
+    }
+
+    fn map_specimen_associated_data_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "specimenUuid" => Some("dwc:occurrenceID"),
+            "associatedDataId" => Some("dcterms:identifier"),
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -435,53 +576,78 @@ mod tests {
     use super::DwcMapper;
 
     const CURRENT_DWC_TERMS_USED_BY_NAHPU: &[&str] = &[
+        "dwc:agentID",
+        "dwc:agentRemarks",
+        "dwc:associatedTaxa",
         "dwc:class",
         "dwc:coordinateUncertaintyInMeters",
         "dwc:country",
         "dwc:county",
         "dwc:datasetID",
-        "dwc:datasetName",
         "dwc:decimalLatitude",
         "dwc:decimalLongitude",
+        "dwc:earliestAgeOrLowestStage",
         "dwc:eventDate",
         "dwc:eventID",
         "dwc:eventRemarks",
         "dwc:eventTime",
         "dwc:family",
+        "dwc:formation",
         "dwc:genus",
         "dwc:geodeticDatum",
         "dwc:georeferenceRemarks",
         "dwc:habitat",
         "dwc:higherClassification",
         "dwc:identificationType",
-        "dwc:institutionCode",
+        "dwc:identificationVerificationStatus",
+        "dwc:identifiedBy",
+        "dwc:identifiedByID",
+        "dwc:infraspecificEpithet",
+        "dwc:kingdom",
+        "dwc:latestAgeOrHighestStage",
         "dwc:lifeStage",
         "dwc:locationID",
         "dwc:locationRemarks",
+        "dwc:materialEntityRemarks",
+        "dwc:materialEntityType",
         "dwc:materialSampleID",
-        "dwc:measurementRemarks",
+        "dwc:maximumElevationInMeters",
+        "dwc:measurementType",
+        "dwc:measurementUnit",
+        "dwc:measurementValue",
         "dwc:minimumElevationInMeters",
         "dwc:municipality",
+        "dwc:objectQuantity",
+        "dwc:objectQuantityType",
         "dwc:occurrenceID",
         "dwc:occurrenceRemarks",
         "dwc:order",
+        "dwc:organismID",
+        "dwc:organismQuantity",
         "dwc:otherCatalogNumbers",
-        "dwc:objectQuantity",
+        "dwc:phylum",
         "dwc:preparations",
+        "dwc:projectID",
+        "dwc:projectTitle",
         "dwc:recordNumber",
         "dwc:recordedBy",
         "dwc:recordedByID",
         "dwc:reproductiveCondition",
         "dwc:samplingEffort",
         "dwc:samplingProtocol",
+        "dwc:scientificName",
         "dwc:scientificNameAuthorship",
         "dwc:sex",
-        "dwc:siteNumber",
         "dwc:specificEpithet",
         "dwc:stateProvince",
         "dwc:taxonID",
+        "dwc:taxonRank",
         "dwc:taxonRemarks",
         "dwc:verbatimLocality",
+        "dwc:verbatimLatitude",
+        "dwc:verbatimLongitude",
+        "dwc:verbatimCoordinates",
+        "dwc:verbatimCoordinateSystem",
         "dwc:vernacularName",
     ];
 
@@ -489,10 +655,8 @@ mod tests {
     fn mapped_dwc_terms_match_the_current_official_term_names() {
         let source_keys = [
             "project::name",
-            "project::startDate",
             "site::siteID",
             "site::projectUuid",
-            "site::siteType",
             "site::country",
             "site::stateProvince",
             "site::county",
@@ -505,6 +669,10 @@ mod tests {
             "coordinate::elevationInMeter",
             "coordinate::datum",
             "coordinate::uncertaintyInMeters",
+            "coordinate::verbatimLatitude",
+            "coordinate::verbatimLongitude",
+            "coordinate::verbatimCoordinates",
+            "coordinate::verbatimCoordinateSystem",
             "collEvent::startDate",
             "collEvent::startTime",
             "collEvent::primaryCollMethod",
@@ -530,8 +698,7 @@ mod tests {
             "specimen::trapType",
             "specimen::coordinateID",
             "specimen::fieldNumber",
-            "specimen::museumID",
-            "specimen::preparatorID",
+            "specimen::determinerID",
             "specimenPart::barcodeID",
             "specimenPart::tissueID",
             "specimenPart::count",
@@ -566,22 +733,83 @@ mod tests {
             "taxonomy::citesStatus",
             "taxonomy::redListCategory",
             "taxonomy::countryStatus",
+            "fossilSite::stratigraphyRemark",
+            "fossilSite::sedimentologyRemark",
         ] {
             assert_eq!(DwcMapper::get_dwc_term_for_source_key(source_key), None);
         }
     }
 
     #[test]
+    fn v17_and_relation_tables_are_routed_to_exact_terms() {
+        for (source_key, expected) in [
+            ("fossilSite::siteID", "dwc:locationID"),
+            ("fossilSite::formation", "dwc:formation"),
+            (
+                "fossilSite::narrowerGeologicStage",
+                "dwc:latestAgeOrHighestStage",
+            ),
+            (
+                "fossilSite::broaderGeologicStage",
+                "dwc:earliestAgeOrLowestStage",
+            ),
+            ("coordinate::nameId", "dwc:locationID"),
+            ("personnel::orcid", "dwc:agentID"),
+            ("personnel::notes", "dwc:agentRemarks"),
+            ("taxonomy::kingdom", "dwc:kingdom"),
+            ("taxonomy::phylum", "dwc:phylum"),
+            ("taxonomy::taxonRank", "dwc:taxonRank"),
+            ("taxonomy::subspecificEpithet", "dwc:infraspecificEpithet"),
+            (
+                "specimen::iDConfidence",
+                "dwc:identificationVerificationStatus",
+            ),
+            ("specimen::determiner", "dwc:identifiedBy"),
+            ("specimen::determinerID", "dwc:identifiedByID"),
+            ("herpAttribute::specimenUuid", "dwc:occurrenceID"),
+            ("arthropodAttribute::hostOrganism", "dwc:associatedTaxa"),
+            (
+                "fossilAttribute::specimenDescription",
+                "dwc:materialEntityRemarks",
+            ),
+            ("parasiteDetection::specimenUuid", "dwc:occurrenceID"),
+            ("parasite::parasiteUuid", "dwc:organismID"),
+            ("parasite::identifierID", "dwc:identifiedByID"),
+            ("parasite::detectionMethod", "dwc:samplingProtocol"),
+            ("eventMedia::eventID", "dwc:eventID"),
+            ("eventAssociatedData::eventID", "dwc:eventID"),
+            ("siteAssociatedData::siteId", "dwc:locationID"),
+            ("specimenAssociatedData::specimenUuid", "dwc:occurrenceID"),
+            ("personnelList::personnelUuid", "dwc:agentID"),
+        ] {
+            assert_eq!(
+                DwcMapper::get_dwc_term_for_source_key(source_key),
+                Some(expected),
+                "unexpected mapping for {source_key}",
+            );
+            assert!(
+                CURRENT_DWC_TERMS_USED_BY_NAHPU.contains(&expected),
+                "{expected} must be a current Darwin Core term",
+            );
+        }
+
+        assert_eq!(
+            DwcMapper::get_dwc_term_for_source_key("media::uri"),
+            Some("dcterms:identifier"),
+        );
+    }
+
+    #[test]
     fn supports_schema_acronyms_and_legacy_aliases() {
         for (source_key, expected) in [
-            ("site::siteID", "dwc:siteNumber"),
+            ("site::siteID", "dwc:locationID"),
             ("coordinate::siteID", "dwc:locationID"),
             ("collPersonnel::eventID", "dwc:eventID"),
             ("collEffort::eventID", "dwc:eventID"),
             ("specimen::speciesID", "dwc:taxonID"),
             ("specimen::collEventID", "dwc:eventID"),
             ("specimenPart::tissueID", "dwc:materialSampleID"),
-            ("site::siteId", "dwc:siteNumber"),
+            ("site::siteId", "dwc:locationID"),
             ("specimen::speciesId", "dwc:taxonID"),
             ("specimenPart::tissueId", "dwc:materialSampleID"),
             ("event::id", "dwc:eventID"),
@@ -654,11 +882,24 @@ mod tests {
     fn preparator_is_an_agent_not_a_preparation_method() {
         assert_eq!(
             DwcMapper::get_dwc_term_for_source_key("specimen::preparatorID"),
-            Some("dwc:recordedBy")
+            None
         );
         assert_eq!(
             DwcMapper::get_dwc_term_for_source_key("specimenPart::treatment"),
             Some("dwc:preparations")
         );
+    }
+
+    #[test]
+    fn weight_measurements_declare_their_dynamic_unit_sources() {
+        for (source, unit_source) in [
+            ("mammalAttribute::weight", "mammalAttribute::weightUnit"),
+            ("birdAttribute::weight", "birdAttribute::weightUnit"),
+            ("herpAttribute::weight", "herpAttribute::weightUnit"),
+        ] {
+            let mapping =
+                DwcMapper::get_dwc_mapping_for_source_key(source).expect("weight should be mapped");
+            assert_eq!(mapping.measurement_unit_source, Some(unit_source));
+        }
     }
 }
