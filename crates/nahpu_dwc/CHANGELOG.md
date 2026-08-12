@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- Add units for arthropod morphometrics and environmental measurements.
+
 ## 0.4.0
 
 - Audit schema v17 mappings against current Darwin Core and Dublin Core terms.

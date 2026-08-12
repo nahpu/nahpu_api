@@ -11,4 +11,4 @@ pub use package::{
 /// Version of the compiled `nahpu_dp` crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Version of the NAHPU Data Package file-format contract.
-pub const FORMAT_VERSION: &str = "3.0";
+pub const FORMAT_VERSION: &str = "3.1";

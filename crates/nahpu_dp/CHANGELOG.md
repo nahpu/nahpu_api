@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Include arthropod attributes as a required NAHPU Data Package table.
+- Bump the NAHPU Data Package format contract to 3.1.
+
 ## 0.3.0
 
 - Replace the SQLite snapshot with the versioned `nahpu-project.json` project

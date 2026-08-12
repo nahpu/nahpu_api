@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use crate::FORMAT_VERSION;
 
-pub const NAHPU_TABLES: [&str; 23] = [
+pub const NAHPU_TABLES: [&str; 24] = [
     "project",
     "site",
     "coordinate",
@@ -38,6 +38,7 @@ pub const NAHPU_TABLES: [&str; 23] = [
     "mammalAttribute",
     "birdAttribute",
     "herpAttribute",
+    "arthropodAttribute",
     "specimenPart",
 ];
 

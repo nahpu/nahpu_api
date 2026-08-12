@@ -192,19 +192,19 @@ impl DwcMapper {
             "birdAttribute::moltRemark" => ("molt remarks", None),
             "herpAttribute::weight" => ("weight", Some("g")),
             "herpAttribute::svl" => ("snout-vent length", Some("cm")),
-            "arthropodAttribute::headWidth" => ("head width", None),
-            "arthropodAttribute::bodyLength" => ("body length", None),
-            "arthropodAttribute::wingspanUpper" => ("upper wingspan", None),
-            "arthropodAttribute::wingspanLower" => ("lower wingspan", None),
+            "arthropodAttribute::headWidth" => ("head width", Some("mm")),
+            "arthropodAttribute::bodyLength" => ("body length", Some("mm")),
+            "arthropodAttribute::wingspanUpper" => ("upper wingspan", Some("mm")),
+            "arthropodAttribute::wingspanLower" => ("lower wingspan", Some("mm")),
             "arthropodAttribute::hostPart" => ("host part", None),
             "arthropodAttribute::canopyAffinity" => ("canopy affinity", None),
             "arthropodAttribute::canopyCover" => ("canopy cover", None),
-            "arthropodAttribute::ambientTemperature" => ("ambient temperature", None),
-            "arthropodAttribute::ambientHumidity" => ("ambient humidity", None),
-            "arthropodAttribute::waterTemperature" => ("water temperature", None),
+            "arthropodAttribute::ambientTemperature" => ("ambient temperature", Some("°C")),
+            "arthropodAttribute::ambientHumidity" => ("ambient humidity", Some("%")),
+            "arthropodAttribute::waterTemperature" => ("water temperature", Some("°C")),
             "arthropodAttribute::pH" => ("pH", None),
-            "arthropodAttribute::dissolvedOxygen" => ("dissolved oxygen", None),
-            "arthropodAttribute::flowVelocity" => ("flow velocity", None),
+            "arthropodAttribute::dissolvedOxygen" => ("dissolved oxygen", Some("mg/L")),
+            "arthropodAttribute::flowVelocity" => ("flow velocity", Some("m/s")),
             "parasiteDetection::parasiteExamined" => ("parasites examined", None),
             "parasiteDetection::parasiteDetected" => ("parasites detected", None),
             "weather::lowestDayTempC" => ("lowest day temperature", Some("°C")),
@@ -849,6 +849,29 @@ mod tests {
                 .expect("bird beak color should be mapped");
             assert_eq!(mapping.measurement_type, Some(measurement_type));
             assert_eq!(mapping.measurement_unit, None);
+        }
+    }
+
+    #[test]
+    fn arthropod_measurements_declare_units() {
+        for (source_key, measurement_type, unit) in [
+            ("arthropodAttribute::headWidth", "head width", "mm"),
+            (
+                "arthropodAttribute::ambientTemperature",
+                "ambient temperature",
+                "°C",
+            ),
+            (
+                "arthropodAttribute::dissolvedOxygen",
+                "dissolved oxygen",
+                "mg/L",
+            ),
+            ("arthropodAttribute::flowVelocity", "flow velocity", "m/s"),
+        ] {
+            let mapping = DwcMapper::get_dwc_mapping_for_source_key(source_key)
+                .expect("arthropod measurement should be mapped");
+            assert_eq!(mapping.measurement_type, Some(measurement_type));
+            assert_eq!(mapping.measurement_unit, Some(unit));
         }
     }
 
