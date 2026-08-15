@@ -586,6 +586,7 @@ impl ConfigDb {
             template_presets,
             document_layouts,
             template_table_preview_columns,
+            custom_field_templates: Vec::new(),
         })
     }
 
@@ -821,6 +822,7 @@ mod tests {
             template_presets: vec![],
             document_layouts: vec![],
             template_table_preview_columns: vec![],
+            custom_field_templates: vec![],
         };
         db.import_selected_configs(export, &[UserConfigSection::UserConfigs])
             .unwrap();

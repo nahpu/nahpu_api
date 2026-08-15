@@ -15,16 +15,40 @@ pub enum UserConfigSection {
     TemplatePresets,
     DocumentLayouts,
     TemplateTablePreview,
+    CustomFields,
 }
 
 impl UserConfigSection {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::UserConfigs,
         Self::RecordExportPresets,
         Self::TemplatePresets,
         Self::DocumentLayouts,
         Self::TemplateTablePreview,
+        Self::CustomFields,
     ];
+}
+
+/// Reusable custom-field configuration. Values and destination scope are
+/// deliberately excluded because SQLite remains their canonical store.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct CustomFieldTemplate {
+    pub template_uuid: String,
+    pub label: String,
+    pub field_type: String,
+    pub placement: String,
+    #[serde(default)]
+    pub catalog_format: Option<String>,
+    #[serde(default)]
+    pub options_json: Option<String>,
+    #[serde(default)]
+    pub dwc_target: Option<String>,
+    #[serde(default)]
+    pub dwc_field: Option<String>,
+    #[serde(default)]
+    pub dwc_mode: Option<String>,
+    #[serde(default)]
+    pub allow_dwc_conflict: bool,
 }
 
 fn default_user_config_sections() -> Vec<UserConfigSection> {
@@ -253,6 +277,9 @@ pub struct UserConfigsExport {
     /// Ordered columns shown in specimen template-table previews.
     #[serde(default)]
     pub template_table_preview_columns: Vec<String>,
+    /// Custom-field templates serialized in the transfer envelope only.
+    #[serde(default)]
+    pub custom_field_templates: Vec<CustomFieldTemplate>,
 }
 
 #[cfg(test)]

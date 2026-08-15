@@ -64,6 +64,16 @@ pub struct BundleRequest {
     #[serde(default)]
     pub measurements: Vec<BTreeMap<String, Value>>,
     #[serde(default)]
+    pub occurrence_assertions: Vec<BTreeMap<String, Value>>,
+    #[serde(default)]
+    pub event_assertions: Vec<BTreeMap<String, Value>>,
+    #[serde(default)]
+    pub material_assertions: Vec<BTreeMap<String, Value>>,
+    #[serde(default)]
+    pub organism_interactions: Vec<BTreeMap<String, Value>>,
+    #[serde(default)]
+    pub organism_interaction_assertions: Vec<BTreeMap<String, Value>>,
+    #[serde(default)]
     pub media: Vec<BtreeMedia>,
     #[serde(default)]
     pub agents: Vec<BTreeMap<String, Value>>,
@@ -75,6 +85,8 @@ pub struct BundleRequest {
     pub material_agent_roles: Vec<BTreeMap<String, Value>>,
     #[serde(default)]
     pub media_agent_roles: Vec<BTreeMap<String, Value>>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 /// A media row and an optional local path to include in the package.
@@ -219,7 +231,8 @@ fn build_manifest(request: &BundleRequest) -> Result<BundleManifest, String> {
             });
         }
     }
-    let mut warnings = media_warnings(&request.media);
+    let mut warnings = request.warnings.clone();
+    warnings.extend(media_warnings(&request.media));
     if request.format == BundleFormat::DarwinCoreDataPackage
         && request.archive_format == ArchiveFormat::Zip
     {
@@ -321,6 +334,10 @@ struct Tables {
     events: Option<Table>,
     materials: Option<Table>,
     measurements: Option<Table>,
+    event_assertions: Option<Table>,
+    material_assertions: Option<Table>,
+    organism_interactions: Option<Table>,
+    organism_interaction_assertions: Option<Table>,
     media: Option<Table>,
     agents: Option<Table>,
     occurrence_agent_roles: Option<Table>,
@@ -337,6 +354,10 @@ impl Tables {
             &self.events,
             &self.materials,
             &self.measurements,
+            &self.event_assertions,
+            &self.material_assertions,
+            &self.organism_interactions,
+            &self.organism_interaction_assertions,
             &self.media,
             &self.agents,
             &self.occurrence_agent_roles,
@@ -358,6 +379,11 @@ fn build_tables(request: &BundleRequest) -> Tables {
     let occurrence_rows = normalize_rows(&request.occurrences);
     let material_rows = normalize_rows(&request.materials);
     let measurement_rows = normalize_rows(&request.measurements);
+    let occurrence_assertion_rows = normalize_rows(&request.occurrence_assertions);
+    let event_assertion_rows = normalize_rows(&request.event_assertions);
+    let material_assertion_rows = normalize_rows(&request.material_assertions);
+    let interaction_rows = normalize_rows(&request.organism_interactions);
+    let interaction_assertion_rows = normalize_rows(&request.organism_interaction_assertions);
     let raw_media_rows = request
         .media
         .iter()
@@ -396,7 +422,7 @@ fn build_tables(request: &BundleRequest) -> Tables {
                 row
             })
             .collect();
-        let assertions = measurement_rows
+        let mut assertions: Vec<BTreeMap<String, String>> = measurement_rows
             .into_iter()
             .map(|mut row| {
                 rename_key(&mut row, "occurrenceID", "occurrence_fk");
@@ -404,6 +430,41 @@ fn build_tables(request: &BundleRequest) -> Tables {
                 rename_key(&mut row, "measurementType", "assertionType");
                 rename_key(&mut row, "measurementValue", "assertionValue");
                 rename_key(&mut row, "measurementUnit", "assertionUnit");
+                row
+            })
+            .collect();
+        assertions.extend(occurrence_assertion_rows.into_iter().map(|mut row| {
+            rename_key(&mut row, "occurrenceID", "occurrence_fk");
+            row
+        }));
+        let event_assertions = event_assertion_rows
+            .into_iter()
+            .map(|mut row| {
+                rename_key(&mut row, "eventID", "event_fk");
+                row
+            })
+            .collect();
+        let material_assertions = material_assertion_rows
+            .into_iter()
+            .map(|mut row| {
+                rename_key(&mut row, "materialEntityID", "materialEntity_fk");
+                row
+            })
+            .collect();
+        let organism_interactions = interaction_rows
+            .into_iter()
+            .map(|mut row| {
+                copy_key(&mut row, "organismInteractionID", "organismInteraction_pk");
+                rename_key(&mut row, "subjectOccurrenceID", "subjectOccurrence_fk");
+                rename_key(&mut row, "relatedOccurrenceID", "relatedOccurrence_fk");
+                rename_key(&mut row, "eventID", "event_fk");
+                row
+            })
+            .collect();
+        let organism_interaction_assertions = interaction_assertion_rows
+            .into_iter()
+            .map(|mut row| {
+                rename_key(&mut row, "organismInteractionID", "organismInteraction_fk");
                 row
             })
             .collect();
@@ -479,6 +540,46 @@ fn build_tables(request: &BundleRequest) -> Tables {
                     "assertionValue",
                 ],
             ),
+            event_assertions: optional_table(
+                "event-assertion",
+                "http://rs.tdwg.org/dwc/terms/Assertion",
+                event_assertions,
+                &["event_fk", "assertionID", "assertionType", "assertionValue"],
+            ),
+            material_assertions: optional_table(
+                "material-assertion",
+                "http://rs.tdwg.org/dwc/terms/Assertion",
+                material_assertions,
+                &[
+                    "materialEntity_fk",
+                    "assertionID",
+                    "assertionType",
+                    "assertionValue",
+                ],
+            ),
+            organism_interactions: optional_table(
+                "organism-interaction",
+                "https://rs.tdwg.org/dwc-dp/terms/OrganismInteraction",
+                organism_interactions,
+                &[
+                    "organismInteraction_pk",
+                    "organismInteractionID",
+                    "subjectOccurrence_fk",
+                    "relatedOccurrence_fk",
+                    "organismInteractionType",
+                ],
+            ),
+            organism_interaction_assertions: optional_table(
+                "organism-interaction-assertion",
+                "http://rs.tdwg.org/dwc/terms/Assertion",
+                organism_interaction_assertions,
+                &[
+                    "organismInteraction_fk",
+                    "assertionID",
+                    "assertionType",
+                    "assertionValue",
+                ],
+            ),
             media: optional_table(
                 "media",
                 "http://rs.tdwg.org/ac/terms/Media",
@@ -532,19 +633,44 @@ fn build_tables(request: &BundleRequest) -> Tables {
         "occurrence",
         "http://rs.tdwg.org/dwc/terms/Occurrence",
         true,
-        occurrence_rows,
+        occurrence_rows.clone(),
         &["occurrenceID", "basisOfRecord"],
     );
     let materials = optional_table(
         "material",
         "http://rs.tdwg.org/dwc/terms/MaterialEntity",
-        material_rows,
+        material_rows.clone(),
         &["occurrenceID"],
     );
+    let mut archive_measurements = measurement_rows;
+    archive_measurements.extend(archive_assertions(
+        occurrence_assertion_rows,
+        &occurrence_rows,
+        &material_rows,
+        &interaction_rows,
+    ));
+    archive_measurements.extend(archive_assertions(
+        event_assertion_rows,
+        &occurrence_rows,
+        &material_rows,
+        &interaction_rows,
+    ));
+    archive_measurements.extend(archive_assertions(
+        material_assertion_rows,
+        &occurrence_rows,
+        &material_rows,
+        &interaction_rows,
+    ));
+    archive_measurements.extend(archive_assertions(
+        interaction_assertion_rows,
+        &occurrence_rows,
+        &material_rows,
+        &interaction_rows,
+    ));
     let measurements = optional_table(
         "measurement_or_fact",
         "http://rs.tdwg.org/dwc/terms/MeasurementOrFact",
-        measurement_rows,
+        archive_measurements,
         &["occurrenceID"],
     );
     let media = optional_table(
@@ -553,11 +679,37 @@ fn build_tables(request: &BundleRequest) -> Tables {
         media_rows,
         &["occurrenceID"],
     );
+    let resource_relationships = optional_table(
+        "resource_relationship",
+        "http://rs.gbif.org/terms/1.0/ResourceRelationship",
+        interaction_rows
+            .into_iter()
+            .map(|mut row| {
+                rename_key(&mut row, "organismInteractionID", "resourceRelationshipID");
+                rename_key(&mut row, "subjectOccurrenceID", "resourceID");
+                rename_key(&mut row, "relatedOccurrenceID", "relatedResourceID");
+                rename_key(
+                    &mut row,
+                    "organismInteractionType",
+                    "relationshipOfResource",
+                );
+                rename_key(&mut row, "relatedOrganismPart", "relationshipRemarks");
+                row.remove("eventID");
+                row.remove("organismInteractionDescription");
+                row
+            })
+            .collect(),
+        &["resourceID", "relatedResourceID", "relationshipOfResource"],
+    );
     Tables {
         occurrences,
         events: None,
         materials,
         measurements,
+        event_assertions: None,
+        material_assertions: None,
+        organism_interactions: resource_relationships,
+        organism_interaction_assertions: None,
         media,
         agents: None,
         occurrence_agent_roles: None,
@@ -566,6 +718,52 @@ fn build_tables(request: &BundleRequest) -> Tables {
         media_agent_roles: None,
         occurrence_media: None,
     }
+}
+
+fn archive_assertions(
+    rows: Vec<BTreeMap<String, String>>,
+    occurrences: &[BTreeMap<String, String>],
+    materials: &[BTreeMap<String, String>],
+    interactions: &[BTreeMap<String, String>],
+) -> Vec<BTreeMap<String, String>> {
+    rows.into_iter()
+        .filter_map(|mut row| {
+            let occurrence_id = row
+                .remove("occurrenceID")
+                .or_else(|| {
+                    let event_id = row.get("eventID")?;
+                    occurrences
+                        .iter()
+                        .find(|occurrence| occurrence.get("eventID") == Some(event_id))
+                        .and_then(|occurrence| occurrence.get("occurrenceID").cloned())
+                })
+                .or_else(|| {
+                    let material_id = row.get("materialEntityID")?;
+                    materials
+                        .iter()
+                        .find(|material| material.get("materialEntityID") == Some(material_id))
+                        .and_then(|material| material.get("occurrenceID").cloned())
+                })
+                .or_else(|| {
+                    let interaction_id = row.get("organismInteractionID")?;
+                    interactions
+                        .iter()
+                        .find(|interaction| {
+                            interaction.get("organismInteractionID") == Some(interaction_id)
+                        })
+                        .and_then(|interaction| interaction.get("subjectOccurrenceID").cloned())
+                })?;
+            row.insert("occurrenceID".to_string(), occurrence_id);
+            rename_key(&mut row, "assertionID", "measurementID");
+            rename_key(&mut row, "assertionType", "measurementType");
+            rename_key(&mut row, "assertionValue", "measurementValue");
+            rename_key(&mut row, "assertionUnit", "measurementUnit");
+            row.remove("eventID");
+            row.remove("materialEntityID");
+            row.remove("organismInteractionID");
+            Some(row)
+        })
+        .collect()
 }
 
 fn role_table(
@@ -641,6 +839,16 @@ fn validate_relationships(tables: &Tables) -> Vec<String> {
         .as_ref()
         .map(|table| key_values(table, "event_pk"))
         .unwrap_or_default();
+    let material_ids = tables
+        .materials
+        .as_ref()
+        .map(|table| key_values(table, "materialEntity_pk"))
+        .unwrap_or_default();
+    let interaction_ids = tables
+        .organism_interactions
+        .as_ref()
+        .map(|table| key_values(table, "organismInteraction_pk"))
+        .unwrap_or_default();
     for row in &tables.occurrences.rows {
         if let Some(event_fk) = row.get("event_fk")
             && !event_ids.contains(event_fk)
@@ -665,6 +873,56 @@ fn validate_relationships(tables: &Tables) -> Vec<String> {
             {
                 errors.push(format!(
                     "{} references missing occurrence {value}.",
+                    table.name
+                ));
+            }
+        }
+    }
+    for table in [&tables.event_assertions].into_iter().flatten() {
+        for row in &table.rows {
+            if let Some(value) = row.get("event_fk")
+                && !event_ids.contains(value)
+            {
+                errors.push(format!("{} references missing event {value}.", table.name));
+            }
+        }
+    }
+    for table in [&tables.material_assertions].into_iter().flatten() {
+        for row in &table.rows {
+            if let Some(value) = row.get("materialEntity_fk")
+                && !material_ids.contains(value)
+            {
+                errors.push(format!(
+                    "{} references missing material {value}.",
+                    table.name
+                ));
+            }
+        }
+    }
+    if let Some(table) = &tables.organism_interactions {
+        for row in &table.rows {
+            for key in ["subjectOccurrence_fk", "relatedOccurrence_fk"] {
+                if let Some(value) = row.get(key)
+                    && !occurrence_ids.contains(value)
+                {
+                    errors.push(format!(
+                        "{} references missing occurrence {value}.",
+                        table.name
+                    ));
+                }
+            }
+        }
+    }
+    for table in [&tables.organism_interaction_assertions]
+        .into_iter()
+        .flatten()
+    {
+        for row in &table.rows {
+            if let Some(value) = row.get("organismInteraction_fk")
+                && !interaction_ids.contains(value)
+            {
+                errors.push(format!(
+                    "{} references missing organism interaction {value}.",
                     table.name
                 ));
             }
@@ -865,6 +1123,7 @@ fn primary_key(table_name: &str) -> Option<&'static str> {
         "material" => Some("materialEntity_pk"),
         "agent" => Some("agent_pk"),
         "media" => Some("media_pk"),
+        "organism-interaction" => Some("organismInteraction_pk"),
         _ => None,
     }
 }
@@ -879,6 +1138,34 @@ fn foreign_keys(table_name: &str) -> Vec<Value> {
             "event_pk",
         )],
         "occurrence-assertion" => &[("occurrence_fk", "about", "occurrence", "occurrence_pk")],
+        "event-assertion" => &[("event_fk", "about", "event", "event_pk")],
+        "material-assertion" => &[(
+            "materialEntity_fk",
+            "about",
+            "material",
+            "materialEntity_pk",
+        )],
+        "organism-interaction" => &[
+            (
+                "subjectOccurrence_fk",
+                "subject occurrence",
+                "occurrence",
+                "occurrence_pk",
+            ),
+            (
+                "relatedOccurrence_fk",
+                "related occurrence",
+                "occurrence",
+                "occurrence_pk",
+            ),
+            ("event_fk", "happened during", "event", "event_pk"),
+        ],
+        "organism-interaction-assertion" => &[(
+            "organismInteraction_fk",
+            "about",
+            "organism-interaction",
+            "organismInteraction_pk",
+        )],
         "occurrence-agent-role" => &[
             ("occurrence_fk", "role for", "occurrence", "occurrence_pk"),
             ("agent_fk", "role holder", "agent", "agent_pk"),
@@ -950,6 +1237,12 @@ fn descriptor_details(table_name: &str, field_name: &str) -> (String, String, &'
         "occurrence_pk" | "occurrence_fk" => format!("{DWC_TERMS}occurrenceID"),
         "materialEntity_pk" | "materialEntity_fk" => {
             format!("{DWC_TERMS}materialEntityID")
+        }
+        "organismInteraction_pk" | "organismInteraction_fk" => {
+            format!("{DWC_TERMS}organismInteractionID")
+        }
+        "subjectOccurrence_fk" | "relatedOccurrence_fk" => {
+            format!("{DWC_TERMS}occurrenceID")
         }
         "collectionEvent_fk" => format!("{DWC_TERMS}eventID"),
         "agentRole" => format!("{DWC_TERMS}relationshipOfResource"),
@@ -1142,12 +1435,18 @@ mod tests {
             events: Vec::new(),
             materials: Vec::new(),
             measurements: Vec::new(),
+            occurrence_assertions: Vec::new(),
+            event_assertions: Vec::new(),
+            material_assertions: Vec::new(),
+            organism_interactions: Vec::new(),
+            organism_interaction_assertions: Vec::new(),
             media: Vec::new(),
             agents: Vec::new(),
             occurrence_agent_roles: Vec::new(),
             event_agent_roles: Vec::new(),
             material_agent_roles: Vec::new(),
             media_agent_roles: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
