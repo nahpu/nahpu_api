@@ -17,15 +17,13 @@ mod tests {
             lead_staff_id: None,
             site_type: Some("Forest".to_string()),
             country: Some("USA".to_string()),
+            island_group: None,
             state_province: Some("California".to_string()),
             county: None,
             municipality: None,
             media_id: None,
             locality: Some("Yosemite".to_string()),
             remark: None,
-            habitat_type: None,
-            habitat_condition: None,
-            habitat_description: None,
         };
 
         let json = serde_json::to_string(&site).expect("Failed to serialize");

@@ -1,10 +1,10 @@
 //! # Darwin Core Mapper
 //!
-//! This module contains the mapping logic from the Nahpu database schema
+//! This module contains the mapping logic from the NAHPU database schema
 //! to the Darwin Core standard terms. This mapping is manually defined based on
-//! the [Persistence data documentation](https://nahpu.app/en/contributing/code/database/).
+//! the [persistence data documentation](https://nahpu.app/en/contributing/code/database/).
 
-/// A utility struct for mapping Nahpu schema names to Darwin Core terms.
+/// A utility struct for mapping NAHPU schema names to Darwin Core terms.
 pub struct DwcMapper;
 
 /// Describes how one NAHPU source field is represented in a flat Darwin Core
@@ -26,6 +26,7 @@ impl DwcMapper {
         match table_name {
             "project" => Self::map_project_column(column_name),
             "site" => Self::map_site_column(column_name),
+            "siteAttribute" => Self::map_site_attribute_column(column_name),
             "fossilSite" => Self::map_fossil_site_column(column_name),
             "coordinate" => Self::map_coordinate_column(column_name),
             "collEvent" => Self::map_coll_event_column(column_name),
@@ -42,7 +43,7 @@ impl DwcMapper {
             "siteMedia" => Self::map_site_media_column(column_name),
             "specimenMedia" => Self::map_specimen_media_column(column_name),
             "personnelList" => Self::map_personnel_list_column(column_name),
-            "weather" => Self::map_weather_column(column_name),
+            "environment" | "weather" => Self::map_environment_column(column_name),
             "mammalAttribute" => Self::map_mammal_attribute_column(column_name),
             "birdAttribute" => Self::map_bird_attribute_column(column_name),
             "herpAttribute" => Self::map_herp_attribute_column(column_name),
@@ -199,23 +200,49 @@ impl DwcMapper {
             "arthropodAttribute::hostPart" => ("host part", None),
             "arthropodAttribute::canopyAffinity" => ("canopy affinity", None),
             "arthropodAttribute::canopyCover" => ("canopy cover", None),
-            "arthropodAttribute::ambientTemperature" => ("ambient temperature", Some("°C")),
-            "arthropodAttribute::ambientHumidity" => ("ambient humidity", Some("%")),
-            "arthropodAttribute::waterTemperature" => ("water temperature", Some("°C")),
-            "arthropodAttribute::pH" => ("pH", None),
-            "arthropodAttribute::dissolvedOxygen" => ("dissolved oxygen", Some("mg/L")),
-            "arthropodAttribute::flowVelocity" => ("flow velocity", Some("m/s")),
+            "siteAttribute::canopyCover" => ("canopy cover", None),
+            "fossilAttribute::weight" => ("weight", Some("g")),
             "parasiteDetection::parasiteExamined" => ("parasites examined", None),
             "parasiteDetection::parasiteDetected" => ("parasites detected", None),
-            "weather::lowestDayTempC" => ("lowest day temperature", Some("°C")),
-            "weather::highestDayTempC" => ("highest day temperature", Some("°C")),
-            "weather::lowestNightTempC" => ("lowest night temperature", Some("°C")),
-            "weather::highestNightTempC" => ("highest night temperature", Some("°C")),
-            "weather::averageHumidity" => ("average humidity", Some("%")),
-            "weather::dewPointTemp" => ("dew point temperature", Some("°C")),
-            "weather::sunriseTime" => ("sunrise", Some("hh:mm:ss")),
-            "weather::sunsetTime" => ("sunset", Some("hh:mm:ss")),
-            "weather::moonPhase" => ("moon phase", None),
+            "environment::lowestDayTempC" | "weather::lowestDayTempC" => {
+                ("lowest day temperature", Some("°C"))
+            }
+            "environment::highestDayTempC" | "weather::highestDayTempC" => {
+                ("highest day temperature", Some("°C"))
+            }
+            "environment::lowestNightTempC" | "weather::lowestNightTempC" => {
+                ("lowest night temperature", Some("°C"))
+            }
+            "environment::highestNightTempC" | "weather::highestNightTempC" => {
+                ("highest night temperature", Some("°C"))
+            }
+            "environment::averageHumidity" | "weather::averageHumidity" => {
+                ("average humidity", Some("%"))
+            }
+            "environment::dewPointTemp" | "weather::dewPointTemp" => {
+                ("dew point temperature", Some("°C"))
+            }
+            "environment::sunriseTime" | "weather::sunriseTime" => ("sunrise", Some("hh:mm:ss")),
+            "environment::sunsetTime" | "weather::sunsetTime" => ("sunset", Some("hh:mm:ss")),
+            "environment::moonPhase" | "weather::moonPhase" => ("moon phase", None),
+            "environment::cloudCover" | "weather::cloudCover" => ("cloud cover", Some("okta")),
+            "environment::rainfallInMm" | "weather::rainfallInMm" => ("rainfall", Some("mm")),
+            "environment::ambientTemperature"
+            | "weather::ambientTemperature"
+            | "arthropodAttribute::ambientTemperature" => ("ambient temperature", Some("°C")),
+            "environment::ambientHumidity"
+            | "weather::ambientHumidity"
+            | "arthropodAttribute::ambientHumidity" => ("ambient humidity", Some("%")),
+            "environment::waterTemperature"
+            | "weather::waterTemperature"
+            | "arthropodAttribute::waterTemperature" => ("water temperature", Some("°C")),
+            "environment::pH" | "weather::pH" | "arthropodAttribute::pH" => ("pH", None),
+            "environment::dissolvedOxygen"
+            | "weather::dissolvedOxygen"
+            | "arthropodAttribute::dissolvedOxygen" => ("dissolved oxygen", Some("mg/L")),
+            "environment::flowVelocity"
+            | "weather::flowVelocity"
+            | "arthropodAttribute::flowVelocity" => ("flow velocity", Some("m/s")),
             _ => return None,
         };
         Some(DwcMapping {
@@ -230,6 +257,7 @@ impl DwcMapper {
                 "mammalAttribute::weight" => Some("mammalAttribute::weightUnit"),
                 "birdAttribute::weight" => Some("birdAttribute::weightUnit"),
                 "herpAttribute::weight" => Some("herpAttribute::weightUnit"),
+                "fossilAttribute::weight" => Some("fossilAttribute::weightUnit"),
                 _ => None,
             },
         })
@@ -250,11 +278,20 @@ impl DwcMapper {
             "siteID" | "siteId" => Some("dwc:locationID"),
             "projectUuid" => Some("dwc:datasetID"),
             "country" => Some("dwc:country"),
+            "islandGroup" => Some("dwc:islandGroup"),
             "stateProvince" => Some("dwc:stateProvince"),
             "county" => Some("dwc:county"),
             "municipality" => Some("dwc:municipality"),
             "locality" => Some("dwc:verbatimLocality"),
             "remark" => Some("dwc:locationRemarks"),
+            "habitatType" | "habitatCondition" | "habitatDescription" => Some("dwc:habitat"),
+            _ => None,
+        }
+    }
+
+    fn map_site_attribute_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "siteID" | "siteId" => Some("dwc:locationID"),
             "habitatType" | "habitatCondition" | "habitatDescription" => Some("dwc:habitat"),
             _ => None,
         }
@@ -455,7 +492,7 @@ impl DwcMapper {
         }
     }
 
-    fn map_weather_column(column_name: &str) -> Option<&'static str> {
+    fn map_environment_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "eventID" | "eventId" => Some("dwc:eventID"),
             "notes" => Some("dwc:eventRemarks"),
@@ -467,7 +504,7 @@ impl DwcMapper {
         match column_name {
             "specimenUuid" => Some("dwc:occurrenceID"),
             "sex" => Some("dwc:sex"),
-            "age" => Some("dwc:lifeStage"),
+            "age" | "lifeStage" => Some("dwc:lifeStage"),
             "reproductiveStage" => Some("dwc:reproductiveCondition"),
             "remark" => Some("dwc:occurrenceRemarks"),
             _ => None,
@@ -478,6 +515,7 @@ impl DwcMapper {
         match column_name {
             "specimenUuid" => Some("dwc:occurrenceID"),
             "sex" => Some("dwc:sex"),
+            "lifeStage" => Some("dwc:lifeStage"),
             "specimenRemark" => Some("dwc:occurrenceRemarks"),
             "habitatRemark" => Some("dwc:habitat"),
             _ => None,
@@ -488,7 +526,7 @@ impl DwcMapper {
         match column_name {
             "specimenUuid" => Some("dwc:occurrenceID"),
             "sex" => Some("dwc:sex"),
-            "age" => Some("dwc:lifeStage"),
+            "age" | "lifeStage" => Some("dwc:lifeStage"),
             "remark" => Some("dwc:occurrenceRemarks"),
             _ => None,
         }
@@ -498,6 +536,8 @@ impl DwcMapper {
         match column_name {
             "specimenUuid" => Some("dwc:occurrenceID"),
             "sex" => Some("dwc:sex"),
+            "lifeStage" => Some("dwc:lifeStage"),
+            "caste" => Some("dwc:caste"),
             "hostOrganism" => Some("dwc:associatedTaxa"),
             "remark" => Some("dwc:occurrenceRemarks"),
             _ => None,
@@ -509,6 +549,9 @@ impl DwcMapper {
             "specimenUuid" => Some("dwc:occurrenceID"),
             "fossilType" => Some("dwc:materialEntityType"),
             "specimenDescription" => Some("dwc:materialEntityRemarks"),
+            "sex" => Some("dwc:sex"),
+            "ontogeneticStage" => Some("dwc:lifeStage"),
+            "remark" => Some("dwc:materialEntityRemarks"),
             _ => None,
         }
     }
@@ -579,6 +622,7 @@ mod tests {
         "dwc:agentID",
         "dwc:agentRemarks",
         "dwc:associatedTaxa",
+        "dwc:caste",
         "dwc:class",
         "dwc:coordinateUncertaintyInMeters",
         "dwc:country",
@@ -603,6 +647,7 @@ mod tests {
         "dwc:identifiedBy",
         "dwc:identifiedByID",
         "dwc:infraspecificEpithet",
+        "dwc:islandGroup",
         "dwc:kingdom",
         "dwc:latestAgeOrHighestStage",
         "dwc:lifeStage",
@@ -658,12 +703,14 @@ mod tests {
             "site::siteID",
             "site::projectUuid",
             "site::country",
+            "site::islandGroup",
             "site::stateProvince",
             "site::county",
             "site::municipality",
             "site::locality",
             "site::remark",
             "site::habitatType",
+            "siteAttribute::habitatType",
             "coordinate::decimalLatitude",
             "coordinate::decimalLongitude",
             "coordinate::elevationInMeter",
@@ -706,10 +753,16 @@ mod tests {
             "weather::notes",
             "mammalAttribute::sex",
             "mammalAttribute::age",
+            "mammalAttribute::lifeStage",
             "mammalAttribute::reproductiveStage",
             "mammalAttribute::remark",
             "birdAttribute::habitatRemark",
+            "birdAttribute::lifeStage",
             "birdAttribute::specimenRemark",
+            "herpAttribute::lifeStage",
+            "arthropodAttribute::lifeStage",
+            "arthropodAttribute::caste",
+            "fossilAttribute::ontogeneticStage",
         ];
 
         for source_key in source_keys {
@@ -781,6 +834,14 @@ mod tests {
             ("siteAssociatedData::siteId", "dwc:locationID"),
             ("specimenAssociatedData::specimenUuid", "dwc:occurrenceID"),
             ("personnelList::personnelUuid", "dwc:agentID"),
+            ("site::islandGroup", "dwc:islandGroup"),
+            ("siteAttribute::habitatDescription", "dwc:habitat"),
+            ("mammalAttribute::lifeStage", "dwc:lifeStage"),
+            ("birdAttribute::lifeStage", "dwc:lifeStage"),
+            ("herpAttribute::lifeStage", "dwc:lifeStage"),
+            ("arthropodAttribute::lifeStage", "dwc:lifeStage"),
+            ("arthropodAttribute::caste", "dwc:caste"),
+            ("fossilAttribute::ontogeneticStage", "dwc:lifeStage"),
         ] {
             assert_eq!(
                 DwcMapper::get_dwc_term_for_source_key(source_key),
@@ -876,6 +937,46 @@ mod tests {
     }
 
     #[test]
+    fn v19_environment_and_legacy_sources_share_measurements() {
+        for (canonical, legacy, measurement_type, unit) in [
+            (
+                "environment::ambientTemperature",
+                "arthropodAttribute::ambientTemperature",
+                "ambient temperature",
+                Some("°C"),
+            ),
+            (
+                "environment::ambientHumidity",
+                "weather::ambientHumidity",
+                "ambient humidity",
+                Some("%"),
+            ),
+            (
+                "environment::dissolvedOxygen",
+                "arthropodAttribute::dissolvedOxygen",
+                "dissolved oxygen",
+                Some("mg/L"),
+            ),
+        ] {
+            let current = DwcMapper::get_dwc_mapping_for_source_key(canonical)
+                .expect("v19 environment measurement should be mapped");
+            let old = DwcMapper::get_dwc_mapping_for_source_key(legacy)
+                .expect("legacy environment measurement should be mapped");
+            assert_eq!(current.measurement_type, Some(measurement_type));
+            assert_eq!(current.measurement_unit, unit);
+            assert_eq!(old.measurement_type, current.measurement_type);
+            assert_eq!(old.measurement_unit, current.measurement_unit);
+        }
+
+        let cloud_cover = DwcMapper::get_dwc_mapping_for_source_key("environment::cloudCover")
+            .expect("cloud cover should be mapped");
+        assert_eq!(cloud_cover.measurement_unit, Some("okta"));
+        let canopy_cover = DwcMapper::get_dwc_mapping_for_source_key("siteAttribute::canopyCover")
+            .expect("canopy cover should be mapped");
+        assert_eq!(canopy_cover.measurement_unit, None);
+    }
+
+    #[test]
     fn legacy_foot_color_and_canonical_toe_color_share_a_mapping() {
         for source_key in ["birdAttribute::toeColor", "birdAttribute::footColor"] {
             let mapping = DwcMapper::get_dwc_mapping_for_source_key(source_key)
@@ -919,6 +1020,7 @@ mod tests {
             ("mammalAttribute::weight", "mammalAttribute::weightUnit"),
             ("birdAttribute::weight", "birdAttribute::weightUnit"),
             ("herpAttribute::weight", "herpAttribute::weightUnit"),
+            ("fossilAttribute::weight", "fossilAttribute::weightUnit"),
         ] {
             let mapping =
                 DwcMapper::get_dwc_mapping_for_source_key(source).expect("weight should be mapped");
