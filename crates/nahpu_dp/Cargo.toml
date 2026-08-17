@@ -1,6 +1,6 @@
 [package]
 name = "nahpu_dp"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 authors = ["Heru Handika <herubiolog@gmail.com>"]
 description = "Create and validate reproducible Frictionless Data Packages for NAHPU."

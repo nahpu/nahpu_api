@@ -15,36 +15,13 @@ use serde_json::Value;
 
 use crate::FORMAT_VERSION;
 
-pub const NAHPU_TABLES: [&str; 24] = [
-    "project",
-    "site",
-    "coordinate",
-    "collEvent",
-    "weather",
-    "collPersonnel",
-    "collEffort",
-    "narrative",
-    "media",
-    "narrativeMedia",
-    "siteMedia",
-    "specimenMedia",
-    "associatedData",
-    "specimenAssociatedData",
-    "siteAssociatedData",
-    "personnelList",
-    "personnel",
-    "taxonomy",
-    "specimen",
-    "mammalAttribute",
-    "birdAttribute",
-    "herpAttribute",
-    "arthropodAttribute",
-    "specimenPart",
-];
+pub const REQUIRED_NAHPU_TABLES: [&str; 4] = ["project", "site", "collEvent", "specimen"];
+
+const PROJECT_JSON_ONLY_COLLECTIONS: [&str; 1] = ["personnelPhoto"];
 
 const PROJECT_PATH: &str = "nahpu-project.json";
 const ENUM_MAPPING_PATH: &str = "mappings/sqlite_enums.csv";
-const VOCABULARY_SECTIONS: [&str; 3] = ["site", "events", "specimens"];
+const VOCABULARY_SECTIONS: [&str; 4] = ["site", "events", "specimens", "parasites"];
 const REQUIRED_VOCABULARIES: [(&str, &str); 6] = [
     ("site", "siteTypes"),
     ("site", "habitatTypes"),
@@ -189,12 +166,16 @@ fn validate_request(request: &PackageRequest) -> Vec<String> {
     }
     validate_project_json(request, &mut errors);
 
-    let names = request
-        .tables
-        .iter()
-        .map(|table| table.name.as_str())
-        .collect::<BTreeSet<_>>();
-    for required in NAHPU_TABLES {
+    let mut names = BTreeSet::new();
+    for table in &request.tables {
+        if !is_valid_table_name(&table.name) {
+            errors.push(format!("Invalid NAHPU table name: {}", table.name));
+        }
+        if !names.insert(table.name.as_str()) {
+            errors.push(format!("Duplicate NAHPU table: {}", table.name));
+        }
+    }
+    for required in REQUIRED_NAHPU_TABLES {
         if !names.contains(required) {
             errors.push(format!("Required NAHPU table is missing: {required}"));
         }
@@ -466,6 +447,7 @@ fn data_package_json(request: &PackageRequest) -> Value {
         controlled_vocabulary_resource("site"),
         controlled_vocabulary_resource("events"),
         controlled_vocabulary_resource("specimens"),
+        controlled_vocabulary_resource("parasites"),
         simple_resource("nahpu-project", PROJECT_PATH, "json", "application/json"),
         simple_resource(
             "user-configs",
@@ -628,7 +610,7 @@ fn simple_resource(name: &str, path: &str, format: &str, media_type: &str) -> Va
 
 fn nahpu_toml(request: &PackageRequest) -> String {
     let mut output = format!(
-        "format_name = \"NAHPU Data Package\"\nformat_version = \"{}\"\ncreated_at = \"{}\"\n\n[application]\nname = \"{}\"\nversion = \"{}\"\nbuild_number = \"{}\"\n\n[schemas]\ndatabase = {}\nuser_configs = {}\n\n[package]\ndescriptor = \"datapackage.json\"\nproject = \"{}\"\nuser_configs = \"configs/user_configs.json\"\nenum_mappings = \"{}\"\ntable_count = {}\nenum_mapping_count = {}\ncontrolled_vocabulary_count = {}\n\n[package.controlled_vocabularies]\nsite = \"{}\"\nevents = \"{}\"\nspecimens = \"{}\"\n\n[nahpu_api.dependencies]\n",
+        "format_name = \"NAHPU Data Package\"\nformat_version = \"{}\"\ncreated_at = \"{}\"\n\n[application]\nname = \"{}\"\nversion = \"{}\"\nbuild_number = \"{}\"\n\n[schemas]\ndatabase = {}\nuser_configs = {}\n\n[package]\ndescriptor = \"datapackage.json\"\nproject = \"{}\"\nuser_configs = \"configs/user_configs.json\"\nenum_mappings = \"{}\"\ntable_count = {}\nenum_mapping_count = {}\ncontrolled_vocabulary_count = {}\n\n[package.controlled_vocabularies]\nsite = \"{}\"\nevents = \"{}\"\nspecimens = \"{}\"\nparasites = \"{}\"\n\n[nahpu_api.dependencies]\n",
         FORMAT_VERSION,
         Utc::now().to_rfc3339(),
         toml_escape(&request.app_name),
@@ -644,6 +626,7 @@ fn nahpu_toml(request: &PackageRequest) -> String {
         vocabulary_path("site"),
         vocabulary_path("events"),
         vocabulary_path("specimens"),
+        vocabulary_path("parasites"),
     );
     for (name, version) in &request.dependencies {
         output.push_str(&format!(
@@ -731,12 +714,19 @@ fn validate_project_json(request: &PackageRequest, errors: &mut Vec<String>) {
         return;
     };
 
+    if let (Some(weather), Some(environment)) = (records.get("weather"), records.get("environment"))
+        && weather != environment
+    {
+        errors.push(
+            "NAHPU project JSON contains conflicting weather and environment records.".to_string(),
+        );
+    }
+
     for table in &request.tables {
         let expected = if table.name == "project" {
             Value::Array(vec![Value::Object(project.clone())])
         } else {
-            records
-                .get(&table.name)
+            project_records_for_table(records, &table.name)
                 .cloned()
                 .unwrap_or_else(|| Value::Array(Vec::new()))
         };
@@ -748,6 +738,52 @@ fn validate_project_json(request: &PackageRequest, errors: &mut Vec<String>) {
             ));
         }
     }
+
+    for (name, value) in records {
+        let Some(rows) = value.as_array() else {
+            continue;
+        };
+        if rows.is_empty() || PROJECT_JSON_ONLY_COLLECTIONS.contains(&name.as_str()) {
+            continue;
+        }
+        if !request
+            .tables
+            .iter()
+            .any(|table| table_matches_project_collection(&table.name, name))
+        {
+            errors.push(format!(
+                "Project JSON contains data for table {name}, but no table resource was provided."
+            ));
+        }
+    }
+}
+
+fn project_records_for_table<'a>(
+    records: &'a serde_json::Map<String, Value>,
+    table_name: &str,
+) -> Option<&'a Value> {
+    records.get(table_name).or_else(|| match table_name {
+        "weather" => records.get("environment"),
+        "environment" => records.get("weather"),
+        _ => None,
+    })
+}
+
+fn table_matches_project_collection(table_name: &str, collection_name: &str) -> bool {
+    table_name == collection_name
+        || matches!(
+            (table_name, collection_name),
+            ("weather", "environment") | ("environment", "weather")
+        )
+}
+
+fn is_valid_table_name(name: &str) -> bool {
+    let mut characters = name.bytes();
+    let Some(first) = characters.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == b'_')
+        && characters.all(|character| character.is_ascii_alphanumeric() || character == b'_')
 }
 
 fn project_record_count(request: &PackageRequest) -> usize {
@@ -865,6 +901,9 @@ fn validate_enum_mappings(request: &PackageRequest, errors: &mut Vec<String>) {
 fn validate_controlled_vocabularies(request: &PackageRequest, errors: &mut Vec<String>) {
     let mut keys = BTreeSet::new();
     for vocabulary in &request.controlled_vocabularies {
+        let required = REQUIRED_VOCABULARIES
+            .iter()
+            .any(|(_, config_key)| *config_key == vocabulary.config_key);
         if !VOCABULARY_SECTIONS.contains(&vocabulary.section.as_str()) {
             errors.push(format!(
                 "Unknown controlled vocabulary section: {}",
@@ -873,7 +912,7 @@ fn validate_controlled_vocabularies(request: &PackageRequest, errors: &mut Vec<S
         }
         if vocabulary.config_key.trim().is_empty()
             || vocabulary.vocabulary_name.trim().is_empty()
-            || vocabulary.values.is_empty()
+            || (required && vocabulary.values.is_empty())
             || vocabulary
                 .values
                 .iter()
@@ -1062,7 +1101,7 @@ mod tests {
     use tempfile::tempdir;
 
     fn request(_directory: &Path, archive_format: ArchiveFormat) -> PackageRequest {
-        let tables = NAHPU_TABLES
+        let tables = REQUIRED_NAHPU_TABLES
             .iter()
             .map(|name| {
                 let mut columns = vec![PackageColumn {
@@ -1094,7 +1133,7 @@ mod tests {
                 }
             })
             .collect();
-        let records = NAHPU_TABLES
+        let records = REQUIRED_NAHPU_TABLES
             .iter()
             .filter(|name| **name != "project")
             .map(|name| ((*name).to_string(), Value::Array(Vec::new())))
@@ -1165,7 +1204,116 @@ mod tests {
         let directory = tempdir().unwrap();
         let mut request = request(directory.path(), ArchiveFormat::Zip);
         request.tables.pop();
-        assert_eq!(validate_request(&request).len(), 1);
+        let errors = validate_request(&request);
+
+        assert!(errors.contains(&"Required NAHPU table is missing: specimen".to_string()));
+    }
+
+    #[test]
+    fn accepts_missing_optional_tables() {
+        let directory = tempdir().unwrap();
+        let request = request(directory.path(), ArchiveFormat::Zip);
+
+        assert!(validate_request(&request).is_empty());
+    }
+
+    #[test]
+    fn accepts_empty_optional_parasite_vocabulary() {
+        let directory = tempdir().unwrap();
+        let mut request = request(directory.path(), ArchiveFormat::Zip);
+        request.controlled_vocabularies.push(ControlledVocabulary {
+            section: "parasites".to_string(),
+            config_key: "parasiteCategories".to_string(),
+            vocabulary_name: "Parasite category".to_string(),
+            values: Vec::new(),
+        });
+
+        assert!(validate_request(&request).is_empty());
+    }
+
+    #[test]
+    fn accepts_optional_parasite_and_legacy_weather_tables() {
+        let directory = tempdir().unwrap();
+        let mut request = request(directory.path(), ArchiveFormat::Zip);
+        let mut project_json: Value = serde_json::from_str(&request.project_json).unwrap();
+        project_json["records"]["weather"] = serde_json::json!([{"id": 1}]);
+        project_json["records"]["parasite"] = serde_json::json!([{"id": 2}]);
+        request.project_json = serde_json::to_string(&project_json).unwrap();
+        request.tables.extend([
+            PackageTable {
+                name: "weather".to_string(),
+                columns: vec![PackageColumn {
+                    name: "id".to_string(),
+                    data_type: "INT".to_string(),
+                    required: false,
+                    primary_key: false,
+                }],
+                foreign_keys: Vec::new(),
+                rows: vec![BTreeMap::from([("id".to_string(), Value::from(1))])],
+            },
+            PackageTable {
+                name: "parasite".to_string(),
+                columns: vec![PackageColumn {
+                    name: "id".to_string(),
+                    data_type: "INT".to_string(),
+                    required: false,
+                    primary_key: false,
+                }],
+                foreign_keys: Vec::new(),
+                rows: vec![BTreeMap::from([("id".to_string(), Value::from(2))])],
+            },
+        ]);
+
+        assert!(validate_request(&request).is_empty());
+    }
+
+    #[test]
+    fn rejects_missing_table_resource_for_non_empty_project_records() {
+        let directory = tempdir().unwrap();
+        let mut request = request(directory.path(), ArchiveFormat::Zip);
+        let mut project_json: Value = serde_json::from_str(&request.project_json).unwrap();
+        project_json["records"]["parasite"] = serde_json::json!([{"id": 2}]);
+        request.project_json = serde_json::to_string(&project_json).unwrap();
+
+        let errors = validate_request(&request);
+
+        assert!(
+            errors
+                .iter()
+                .any(|error| { error.contains("Project JSON contains data for table parasite") })
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_and_duplicate_table_names() {
+        let directory = tempdir().unwrap();
+        let mut request = request(directory.path(), ArchiveFormat::Zip);
+        let duplicate = request.tables[1].clone();
+        request.tables.push(duplicate);
+        request.tables.push(PackageTable {
+            name: "../unsafe".to_string(),
+            columns: vec![PackageColumn {
+                name: "id".to_string(),
+                data_type: "INT".to_string(),
+                required: false,
+                primary_key: false,
+            }],
+            foreign_keys: Vec::new(),
+            rows: Vec::new(),
+        });
+
+        let errors = validate_request(&request);
+
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("Duplicate NAHPU table"))
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.contains("Invalid NAHPU table name"))
+        );
     }
 
     #[test]
@@ -1251,7 +1399,7 @@ mod tests {
             for section in VOCABULARY_SECTIONS {
                 assert!(extracted.join(vocabulary_path(section)).is_file());
             }
-            for table in NAHPU_TABLES {
+            for table in REQUIRED_NAHPU_TABLES {
                 assert!(extracted.join(format!("tables/{table}.csv")).is_file());
             }
             let mappings = fs::read_to_string(extracted.join(ENUM_MAPPING_PATH)).unwrap();
