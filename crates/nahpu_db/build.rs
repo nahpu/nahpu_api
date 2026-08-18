@@ -22,7 +22,7 @@ use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 
 const NAHPU_TABLES_URL: &str =
-    "https://raw.githubusercontent.com/nahpu/nahpu/main/lib/services/database/tables.drift";
+    "https://raw.githubusercontent.com/nahpu/nahpu/dev/lib/services/database/tables.drift";
 
 const GENERATED_FILE: &str = "nahpu_sqlite.rs";
 const LOCAL_SCHEMA_PATH: &str = "../../../../Flutter/nahpu/lib/services/database/tables.drift";
