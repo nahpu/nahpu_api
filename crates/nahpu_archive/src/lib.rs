@@ -5,6 +5,7 @@
 //! It implements lightweight wrappers around ZIP, gzip, and tar.gz formats.
 
 pub mod gzip;
+pub mod progress;
 pub mod tar_gzip;
 pub mod zip;
 

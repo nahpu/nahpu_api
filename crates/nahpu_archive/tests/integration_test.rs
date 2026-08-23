@@ -99,3 +99,150 @@ fn tar_gzip_round_trip() {
         "id\n1\n"
     );
 }
+
+/// Builds two files below a shared parent and returns `(parent, files, total_bytes)`.
+fn sample_tree(root: &std::path::Path) -> (std::path::PathBuf, Vec<std::path::PathBuf>, u64) {
+    let base = root.join("source");
+    let nested = base.join("media");
+    fs::create_dir_all(&nested).unwrap();
+    let first = base.join("nahpu.sqlite3");
+    let second = nested.join("roost.jpg");
+    fs::write(&first, vec![b'a'; 4096]).unwrap();
+    fs::write(&second, vec![b'b'; 8192]).unwrap();
+    (base, vec![first, second], 4096 + 8192)
+}
+
+fn assert_monotonic(snapshots: &[nahpu_archive::progress::ArchiveProgress]) {
+    for pair in snapshots.windows(2) {
+        assert!(
+            pair[1].entries_done >= pair[0].entries_done,
+            "entry count went backwards: {pair:?}"
+        );
+        assert!(
+            pair[1].bytes_done >= pair[0].bytes_done,
+            "byte count went backwards: {pair:?}"
+        );
+    }
+}
+
+#[test]
+fn zip_write_reports_every_entry() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let (base, files, total_bytes) = sample_tree(temp_dir.path());
+    let output = temp_dir.path().join("archive.zip");
+
+    let mut snapshots = Vec::new();
+    ZipArchive::new(&base, None, &output, &files)
+        .write_with_progress(&mut |progress| snapshots.push(progress))
+        .expect("Failed to write zip archive");
+
+    assert_monotonic(&snapshots);
+    let first = snapshots.first().expect("no progress reported");
+    assert_eq!(first.entries_total, 2);
+    assert_eq!(first.bytes_total, total_bytes);
+    assert!(
+        snapshots
+            .iter()
+            .any(|snapshot| snapshot.current_path == "media/roost.jpg"),
+        "the archive-relative path was never reported: {snapshots:?}"
+    );
+
+    let last = snapshots.last().unwrap();
+    assert_eq!(last.entries_done, 2);
+    assert_eq!(last.entries_done, last.entries_total);
+    assert_eq!(last.bytes_done, total_bytes);
+    assert_eq!(last.bytes_done, last.bytes_total);
+}
+
+#[test]
+fn tar_gzip_write_reports_every_entry() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let (base, files, total_bytes) = sample_tree(temp_dir.path());
+    let output = temp_dir.path().join("archive.tar.gz");
+
+    let mut snapshots = Vec::new();
+    TarGzipArchive::new(&base, &output, &files)
+        .write_with_progress(&mut |progress| snapshots.push(progress))
+        .expect("Failed to write tar.gz archive");
+
+    assert_monotonic(&snapshots);
+    let last = snapshots.last().expect("no progress reported");
+    assert_eq!(last.entries_done, 2);
+    assert_eq!(last.entries_done, last.entries_total);
+    assert_eq!(last.bytes_done, total_bytes);
+    assert_eq!(last.bytes_done, last.bytes_total);
+}
+
+#[test]
+fn zip_extract_reports_every_entry() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let (base, files, total_bytes) = sample_tree(temp_dir.path());
+    let output = temp_dir.path().join("archive.zip");
+    ZipArchive::new(&base, None, &output, &files)
+        .write()
+        .unwrap();
+
+    let extract_dir = temp_dir.path().join("extracted");
+    let mut snapshots = Vec::new();
+    ZipExtractor::new(&output, &extract_dir)
+        .extract_with_progress(&mut |progress| snapshots.push(progress))
+        .expect("Failed to extract zip archive");
+
+    assert_monotonic(&snapshots);
+    let last = snapshots.last().expect("no progress reported");
+    assert_eq!(last.entries_done, 2);
+    assert_eq!(last.bytes_done, total_bytes);
+    assert!(extract_dir.join("media/roost.jpg").exists());
+}
+
+#[test]
+fn tar_gzip_extract_reports_running_counts() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let (base, files, total_bytes) = sample_tree(temp_dir.path());
+    let output = temp_dir.path().join("archive.tar.gz");
+    TarGzipArchive::new(&base, &output, &files).write().unwrap();
+
+    let extract_dir = temp_dir.path().join("extracted");
+    let mut snapshots = Vec::new();
+    TarGzipExtractor::new(&output, &extract_dir)
+        .extract_with_progress(&mut |progress| snapshots.push(progress))
+        .expect("Failed to extract tar.gz archive");
+
+    assert_monotonic(&snapshots);
+    // A tar stream has no index, so totals are only reconciled by the final snapshot.
+    let last = snapshots.last().expect("no progress reported");
+    assert_eq!(last.entries_done, 2);
+    assert_eq!(last.entries_done, last.entries_total);
+    assert_eq!(last.bytes_done, total_bytes);
+    assert!(extract_dir.join("media/roost.jpg").exists());
+}
+
+#[test]
+fn gzip_reports_progress_in_both_directions() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let input = temp_dir.path().join("nahpu-project.json");
+    fs::write(&input, vec![b'{'; 32768]).unwrap();
+    let compressed = temp_dir.path().join("nahpu-project.json.gz");
+
+    let mut compress_snapshots = Vec::new();
+    gzip::compress_with_progress(&input, &compressed, &mut |progress| {
+        compress_snapshots.push(progress)
+    })
+    .expect("Failed to gzip input");
+
+    assert_monotonic(&compress_snapshots);
+    let last = compress_snapshots.last().expect("no progress reported");
+    assert_eq!(last.bytes_done, 32768);
+    assert_eq!(last.entries_done, 1);
+
+    let extracted = temp_dir.path().join("output.json");
+    let mut extract_snapshots = Vec::new();
+    gzip::decompress_with_progress(&compressed, &extracted, &mut |progress| {
+        extract_snapshots.push(progress)
+    })
+    .expect("Failed to gunzip input");
+
+    assert_monotonic(&extract_snapshots);
+    assert_eq!(extract_snapshots.last().unwrap().entries_done, 1);
+    assert_eq!(fs::read(&input).unwrap(), fs::read(&extracted).unwrap());
+}
