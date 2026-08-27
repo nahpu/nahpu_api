@@ -26,6 +26,7 @@ impl DwcMapper {
         match table_name {
             "project" => Self::map_project_column(column_name),
             "site" => Self::map_site_column(column_name),
+            "geography" => Self::map_geography_column(column_name),
             "siteAttribute" => Self::map_site_attribute_column(column_name),
             "fossilSite" => Self::map_fossil_site_column(column_name),
             "coordinate" => Self::map_coordinate_column(column_name),
@@ -285,6 +286,23 @@ impl DwcMapper {
             "locality" => Some("dwc:verbatimLocality"),
             "remark" => Some("dwc:locationRemarks"),
             "habitatType" | "habitatCondition" | "habitatDescription" => Some("dwc:habitat"),
+            _ => None,
+        }
+    }
+
+    /// Maps the shared locality table introduced in Nahpu schema v21.
+    ///
+    /// These columns previously lived on `site`, so the geography arms of
+    /// [`Self::map_site_column`] are kept as the legacy alias for records
+    /// exported before the move.
+    fn map_geography_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "country" => Some("dwc:country"),
+            "islandGroup" => Some("dwc:islandGroup"),
+            "stateProvince" => Some("dwc:stateProvince"),
+            "county" => Some("dwc:county"),
+            "municipality" => Some("dwc:municipality"),
+            "locality" => Some("dwc:verbatimLocality"),
             _ => None,
         }
     }
@@ -710,6 +728,12 @@ mod tests {
             "site::locality",
             "site::remark",
             "site::habitatType",
+            "geography::country",
+            "geography::islandGroup",
+            "geography::stateProvince",
+            "geography::county",
+            "geography::municipality",
+            "geography::locality",
             "siteAttribute::habitatType",
             "coordinate::decimalLatitude",
             "coordinate::decimalLongitude",
@@ -835,6 +859,8 @@ mod tests {
             ("specimenAssociatedData::specimenUuid", "dwc:occurrenceID"),
             ("personnelList::personnelUuid", "dwc:agentID"),
             ("site::islandGroup", "dwc:islandGroup"),
+            ("geography::islandGroup", "dwc:islandGroup"),
+            ("geography::locality", "dwc:verbatimLocality"),
             ("siteAttribute::habitatDescription", "dwc:habitat"),
             ("mammalAttribute::lifeStage", "dwc:lifeStage"),
             ("birdAttribute::lifeStage", "dwc:lifeStage"),
@@ -858,6 +884,38 @@ mod tests {
             DwcMapper::get_dwc_term_for_source_key("media::uri"),
             Some("dcterms:identifier"),
         );
+    }
+
+    #[test]
+    fn geography_and_legacy_site_keys_resolve_to_the_same_terms() {
+        // Nahpu v21 moved these columns from `site` to the shared `geography`
+        // table. Both spellings must resolve identically so records exported
+        // before the move keep their Darwin Core headers.
+        for column in [
+            "country",
+            "islandGroup",
+            "stateProvince",
+            "county",
+            "municipality",
+            "locality",
+        ] {
+            let legacy = DwcMapper::get_dwc_term_for_source_key(&format!("site::{column}"));
+            let current = DwcMapper::get_dwc_term_for_source_key(&format!("geography::{column}"));
+            assert!(current.is_some(), "geography::{column} must be mapped");
+            assert_eq!(
+                current, legacy,
+                "geography::{column} must match site::{column}"
+            );
+        }
+
+        // Columns that stayed on `site` must not answer under `geography`.
+        for column in ["siteID", "projectUuid", "remark", "habitatType"] {
+            assert_eq!(
+                DwcMapper::get_dwc_term_for_source_key(&format!("geography::{column}")),
+                None,
+                "geography::{column} is not a geography column",
+            );
+        }
     }
 
     #[test]
