@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+
+use nahpu_db::types::nahpu_sqlite::Geography;
+
 use crate::models::ExportData;
 use crate::{ExportError, TypstCompiler};
 
@@ -43,12 +47,16 @@ impl DocumentRenderer {
 
         if let Some(sites) = &self.data.sites {
             out.push_str("# Sites\n\n");
+            let geography_by_id = self.geography_by_id();
             for record in sites {
-                if let Some(loc) = &record.locality {
-                    out.push_str(&format!("**Locality**: {}\n\n", escape_markdown(loc)));
-                }
-                if let Some(country) = &record.country {
-                    out.push_str(&format!("**Country**: {}\n\n", escape_markdown(country)));
+                if let Some(geography) = record.geography_id.and_then(|id| geography_by_id.get(&id))
+                {
+                    if let Some(locality) = &geography.locality {
+                        out.push_str(&format!("**Locality**: {}\n\n", escape_markdown(locality)));
+                    }
+                    if let Some(country) = &geography.country {
+                        out.push_str(&format!("**Country**: {}\n\n", escape_markdown(country)));
+                    }
                 }
                 out.push_str("---\n\n");
             }
@@ -111,12 +119,16 @@ impl DocumentRenderer {
 
         if let Some(sites) = &self.data.sites {
             out.push_str("= Sites\n\n");
+            let geography_by_id = self.geography_by_id();
             for record in sites {
-                if let Some(loc) = &record.locality {
-                    out.push_str(&format!("*Locality*: {}\n\n", escape_typst(loc)));
-                }
-                if let Some(country) = &record.country {
-                    out.push_str(&format!("*Country*: {}\n\n", escape_typst(country)));
+                if let Some(geography) = record.geography_id.and_then(|id| geography_by_id.get(&id))
+                {
+                    if let Some(locality) = &geography.locality {
+                        out.push_str(&format!("*Locality*: {}\n\n", escape_typst(locality)));
+                    }
+                    if let Some(country) = &geography.country {
+                        out.push_str(&format!("*Country*: {}\n\n", escape_typst(country)));
+                    }
                 }
                 out.push_str("#line(length: 100%)\n\n");
             }
@@ -158,6 +170,15 @@ impl DocumentRenderer {
     /// which can be loaded in Dart (since Flutter can easily read assets as bytes).
     pub fn render_pdf(&self, compiler: &TypstCompiler) -> Result<Vec<u8>, ExportError> {
         compiler.compile(&self.render_typst())
+    }
+
+    fn geography_by_id(&self) -> HashMap<i32, &Geography> {
+        self.data
+            .geographies
+            .iter()
+            .flatten()
+            .map(|geography| (geography.id, geography))
+            .collect()
     }
 }
 
@@ -417,10 +438,53 @@ mod tests {
 
     #[test]
     fn parses_document_json_with_contextual_errors() {
-        let renderer = DocumentRenderer::from_json("{}")
-            .expect("empty optional collections should be accepted");
+        let renderer = DocumentRenderer::new(ExportData::default());
         assert!(renderer.render_markdown().is_empty());
+        assert!(DocumentRenderer::from_json("{}").is_ok());
         assert!(DocumentRenderer::from_json("not JSON").is_err());
+    }
+
+    #[test]
+    fn renders_site_geography_in_markdown_and_typst() {
+        let renderer = DocumentRenderer::from_json(
+            r#"{
+                "sites": [{"id": 1, "siteId": "Site-01", "geographyId": 10}],
+                "geographies": [{
+                    "id": 10,
+                    "country": "United * States",
+                    "locality": "Yosemite #1",
+                    "matchKey": "united-states|yosemite"
+                }]
+            }"#,
+        )
+        .expect("schema v21 site and geography should deserialize");
+
+        let markdown = renderer.render_markdown();
+        let typst = renderer.render_typst();
+        assert!(markdown.contains("**Locality**: Yosemite \\#1"));
+        assert!(markdown.contains("**Country**: United \\* States"));
+        assert!(typst.contains("*Locality*: Yosemite \\#1"));
+        assert!(typst.contains("*Country*: United \\* States"));
+    }
+
+    #[test]
+    fn omits_location_for_missing_or_unmatched_geography() {
+        let inputs = [
+            r#"{"sites": [{"id": 1, "geographyId": null}]}"#,
+            r#"{
+                "sites": [{"id": 1, "geographyId": 99}],
+                "geographies": [{"id": 10, "locality": "Elsewhere", "matchKey": "elsewhere"}]
+            }"#,
+        ];
+
+        for input in inputs {
+            let renderer = DocumentRenderer::from_json(input)
+                .expect("missing geography relationships should be accepted");
+            for output in [renderer.render_markdown(), renderer.render_typst()] {
+                assert!(!output.contains("Locality"));
+                assert!(!output.contains("Country"));
+            }
+        }
     }
 
     #[test]

@@ -10,12 +10,7 @@ constructs used by NAHPU templates.
 ```rust
 use nahpu_export::{DocumentRenderer, ExportData, TypstCompiler};
 
-let renderer = DocumentRenderer::new(ExportData {
-    narrative: None,
-    sites: None,
-    events: None,
-    specimens: None,
-});
+let renderer = DocumentRenderer::new(ExportData::default());
 let typst = renderer.render_typst();
 let pdf = TypstCompiler::new(vec![]).compile(&typst)?;
 # Ok::<(), nahpu_export::ExportError>(())
