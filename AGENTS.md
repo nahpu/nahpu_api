@@ -41,3 +41,9 @@ Do not commit local databases, generated archives, credentials, or machine-speci
 ## Agent-Specific Instructions
 
 Preserve user changes and avoid unrelated refactors. Always write the product name as `NAHPU`. Do not create commits, branches, pushes, or pull requests; leave Git operations under user control.
+
+Any change to `crates/nahpu_db/schema/tables.drift` must also update the
+mirrored `lib/services/database/tables.drift` in the NAHPU Flutter repository.
+Review every added, removed, or renamed table and column in `nahpu_dwc`, update
+its schema-field classifications and tests, and update the Darwin Core audit
+in the Persistence data documentation in the same change.

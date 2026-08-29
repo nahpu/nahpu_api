@@ -1,4 +1,4 @@
-use crate::dwc::DwcMapper;
+use super::map_serialized_fields;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -20,20 +20,45 @@ pub fn convert_to_dwc_json<T: Serialize>(
     record: &T,
 ) -> Result<Value, serde_json::Error> {
     let mut mapped_record = Map::new();
-    let value = serde_json::to_value(record)?;
-
-    if let Value::Object(map) = value {
-        for (key, val) in map {
-            // We can optionally filter out null values if needed for DWC export
-            if val.is_null() {
-                continue;
-            }
-
-            // Map the property key to a DWC term, fallback to original key if not mapped
-            let dwc_key = DwcMapper::get_dwc_term(table_name, &key).unwrap_or(&key);
-            mapped_record.insert(dwc_key.to_string(), val);
-        }
+    for (field, value) in map_serialized_fields(table_name, serde_json::to_value(record)?) {
+        mapped_record.insert(field, value);
     }
 
     Ok(Value::Object(mapped_record))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Serialize;
+    use serde_json::json;
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct HabitatFields {
+        habitat_type: String,
+        habitat_condition: String,
+        unmapped_field: String,
+    }
+
+    #[test]
+    fn preserves_unmapped_and_colliding_fields_in_the_nahpu_namespace() {
+        let result = convert_to_dwc_json(
+            "siteAttribute",
+            &HabitatFields {
+                habitat_type: "forest".to_string(),
+                habitat_condition: "disturbed".to_string(),
+                unmapped_field: "kept".to_string(),
+            },
+        )
+        .expect("JSON conversion should succeed");
+
+        assert!(result.get("dwc:habitat").is_none());
+        assert_eq!(result["nahpu:siteAttribute.habitatType"], json!("forest"));
+        assert_eq!(
+            result["nahpu:siteAttribute.habitatCondition"],
+            json!("disturbed")
+        );
+        assert_eq!(result["nahpu:siteAttribute.unmappedField"], json!("kept"));
+    }
 }

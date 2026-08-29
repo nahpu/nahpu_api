@@ -1,6 +1,6 @@
 [package]
 name = "nahpu_dwc"
-version = "0.4.4"
+version = "0.5.0"
 edition = "2024"
 authors = ["Heru Handika <herubiolog@gmail.com>"]
 homepage = "https://www.nahpu.app/"
@@ -21,4 +21,5 @@ nahpu_db = { version = "0.5.0", path = "../nahpu_db" }
 nahpu_archive = { version = "0.3.0", path = "../nahpu_archive" }
 
 [dev-dependencies]
+sqlparser = "0.62.0"
 tempfile = "3.10.0"

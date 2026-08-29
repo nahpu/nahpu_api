@@ -1,1 +1,1 @@
-pub mod exif;
+pub(crate) mod exif;

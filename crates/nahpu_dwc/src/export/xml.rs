@@ -4,6 +4,8 @@ use serde::Serialize;
 use serde_json::Value;
 use std::io::Cursor;
 
+use super::{NAHPU_XML_NAMESPACE, map_serialized_fields};
+
 /// Exports an array of struct records to the Simple Darwin Core XML format.
 ///
 /// Automatically serializes the structs to determine their fields,
@@ -23,33 +25,22 @@ pub fn export_to_dwc_xml<T: Serialize>(
     root.push_attribute(("xmlns:dcterms", "http://purl.org/dc/terms/"));
     root.push_attribute(("xmlns:dwc", "http://rs.tdwg.org/dwc/terms/"));
     root.push_attribute(("xmlns:dwr", "http://rs.tdwg.org/dwc/xsd/simpledarwincore/"));
+    root.push_attribute(("xmlns:nahpu", NAHPU_XML_NAMESPACE));
 
     writer.write_event(Event::Start(root))?;
 
     for record in records {
-        let val = serde_json::to_value(record)?;
-        if let Value::Object(map) = val {
+        let fields = map_serialized_fields(table_name, serde_json::to_value(record)?);
+        if !fields.is_empty() {
             writer.write_event(Event::Start(BytesStart::new("dwr:SimpleDarwinRecord")))?;
 
-            for (key, field_val) in map {
-                // Ignore Null values to keep XML clean
-                if field_val.is_null() {
-                    continue;
-                }
-
+            for (field_name, field_val) in fields {
                 let str_val = match field_val {
                     Value::String(s) => s,
                     _ => field_val.to_string(), // basic serialization for numbers/booleans
                 };
 
-                if str_val.is_empty() {
-                    continue;
-                }
-
-                let dwc_term =
-                    crate::dwc::DwcMapper::get_dwc_term(table_name, &key).unwrap_or(&key);
-
-                let field_tag = BytesStart::new(dwc_term);
+                let field_tag = BytesStart::new(field_name);
                 writer.write_event(Event::Start(field_tag.clone()))?;
                 writer.write_event(Event::Text(BytesText::new(&str_val)))?;
                 writer.write_event(Event::End(field_tag.to_end()))?;
@@ -75,6 +66,7 @@ mod tests {
     struct DummySite {
         site_id: String,
         country: String,
+        unmapped_field: String,
     }
 
     #[test]
@@ -83,10 +75,12 @@ mod tests {
             DummySite {
                 site_id: "S1".to_string(),
                 country: "USA".to_string(),
+                unmapped_field: "first".to_string(),
             },
             DummySite {
                 site_id: "S2".to_string(),
                 country: "Canada & More".to_string(), // Test XML escaping
+                unmapped_field: "second".to_string(),
             },
         ];
 
@@ -98,11 +92,13 @@ mod tests {
         // Check root and namespaces
         assert!(xml.contains("<dwr:SimpleDarwinRecordSet"));
         assert!(xml.contains("xmlns:dwc=\"http://rs.tdwg.org/dwc/terms/\""));
+        assert!(xml.contains("xmlns:nahpu=\"https://www.nahpu.app/terms/\""));
 
         // Check Record 1
         assert!(xml.contains("<dwr:SimpleDarwinRecord>"));
         assert!(xml.contains("<dwc:locationID>S1</dwc:locationID>"));
         assert!(xml.contains("<dwc:country>USA</dwc:country>"));
+        assert!(xml.contains("<nahpu:site.unmappedField>first</nahpu:site.unmappedField>"));
 
         // Check Record 2 & escaping
         assert!(xml.contains("<dwc:locationID>S2</dwc:locationID>"));

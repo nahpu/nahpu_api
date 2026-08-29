@@ -380,7 +380,6 @@ impl DwcMapper {
             "projectUuid" => Some("dwc:datasetID"),
             "siteID" | "siteId" => Some("dwc:locationID"),
             "date" => Some("dcterms:date"),
-            "narrative" => Some("dwc:eventRemarks"),
             _ => None,
         }
     }
@@ -417,6 +416,7 @@ impl DwcMapper {
     fn map_personnel_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "uuid" | "orcid" => Some("dwc:agentID"),
+            "name" => Some("dwc:preferredAgentName"),
             "notes" => Some("dwc:agentRemarks"),
             _ => None,
         }
@@ -474,7 +474,7 @@ impl DwcMapper {
             "count" => Some("dwc:objectQuantity"),
             "dateTaken" => Some("dwc:eventDate"),
             "timeTaken" => Some("dwc:eventTime"),
-            "remark" | "pmi" => Some("dwc:occurrenceRemarks"),
+            "remark" => Some("dwc:materialEntityRemarks"),
             _ => None,
         }
     }
@@ -584,11 +584,11 @@ impl DwcMapper {
 
     fn map_parasite_column(column_name: &str) -> Option<&'static str> {
         match column_name {
-            "specimenUuid" => Some("dwc:occurrenceID"),
             "speciesID" | "speciesId" => Some("dwc:taxonID"),
             "identifierID" | "identifierId" => Some("dwc:identifiedByID"),
-            "parasiteUuid" => Some("dwc:organismID"),
-            "count" => Some("dwc:organismQuantity"),
+            "parasiteID" | "parasiteId" => Some("dwc:catalogNumber"),
+            "parasiteUuid" => Some("dwc:occurrenceID"),
+            "count" => Some("dwc:individualCount"),
             "preparationMethod" | "treatment" => Some("dwc:preparations"),
             "lifeStage" => Some("dwc:lifeStage"),
             "dateCollected" => Some("dwc:eventDate"),
@@ -640,6 +640,7 @@ mod tests {
         "dwc:agentID",
         "dwc:agentRemarks",
         "dwc:associatedTaxa",
+        "dwc:catalogNumber",
         "dwc:caste",
         "dwc:class",
         "dwc:coordinateUncertaintyInMeters",
@@ -664,6 +665,7 @@ mod tests {
         "dwc:identificationVerificationStatus",
         "dwc:identifiedBy",
         "dwc:identifiedByID",
+        "dwc:individualCount",
         "dwc:infraspecificEpithet",
         "dwc:islandGroup",
         "dwc:kingdom",
@@ -685,11 +687,10 @@ mod tests {
         "dwc:occurrenceID",
         "dwc:occurrenceRemarks",
         "dwc:order",
-        "dwc:organismID",
-        "dwc:organismQuantity",
         "dwc:otherCatalogNumbers",
         "dwc:phylum",
         "dwc:preparations",
+        "dwc:preferredAgentName",
         "dwc:projectID",
         "dwc:projectTitle",
         "dwc:recordNumber",
@@ -752,7 +753,6 @@ mod tests {
             "collPersonnel::personnelId",
             "collEffort::method",
             "collEffort::notes",
-            "narrative::narrative",
             "taxonomy::id",
             "taxonomy::taxonClass",
             "taxonomy::taxonOrder",
@@ -832,6 +832,7 @@ mod tests {
             ),
             ("coordinate::nameId", "dwc:locationID"),
             ("personnel::orcid", "dwc:agentID"),
+            ("personnel::name", "dwc:preferredAgentName"),
             ("personnel::notes", "dwc:agentRemarks"),
             ("taxonomy::kingdom", "dwc:kingdom"),
             ("taxonomy::phylum", "dwc:phylum"),
@@ -850,7 +851,9 @@ mod tests {
                 "dwc:materialEntityRemarks",
             ),
             ("parasiteDetection::specimenUuid", "dwc:occurrenceID"),
-            ("parasite::parasiteUuid", "dwc:organismID"),
+            ("parasite::parasiteUuid", "dwc:occurrenceID"),
+            ("parasite::parasiteID", "dwc:catalogNumber"),
+            ("parasite::count", "dwc:individualCount"),
             ("parasite::identifierID", "dwc:identifiedByID"),
             ("parasite::detectionMethod", "dwc:samplingProtocol"),
             ("eventMedia::eventID", "dwc:eventID"),
@@ -1073,6 +1076,21 @@ mod tests {
     }
 
     #[test]
+    fn relationship_and_ambiguous_fields_are_not_forced_into_direct_terms() {
+        for source_key in [
+            "parasite::specimenUuid",
+            "specimenPart::pmi",
+            "narrative::narrative",
+        ] {
+            assert_eq!(
+                DwcMapper::get_dwc_term_for_source_key(source_key),
+                None,
+                "{source_key} should remain an explicit NAHPU field",
+            );
+        }
+    }
+
+    #[test]
     fn weight_measurements_declare_their_dynamic_unit_sources() {
         for (source, unit_source) in [
             ("mammalAttribute::weight", "mammalAttribute::weightUnit"),
@@ -1086,3 +1104,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod schema_audit;

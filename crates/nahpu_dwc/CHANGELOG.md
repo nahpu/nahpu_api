@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+- Align the mapper and structured export contract with NAHPU schema v21 and
+  the 2026-05-26 Darwin Core vocabulary.
+- Preserve unmapped and colliding JSON and XML fields in the NAHPU namespace.
+- Correct parasite, material-entity, and agent mappings and classify every
+  persisted schema field.
+
 ## 0.4.1
 
 - Add units for arthropod morphometrics and environmental measurements.

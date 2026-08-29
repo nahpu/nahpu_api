@@ -75,11 +75,13 @@ fn main() {
 The complete NAHPU persistence model and the authoritative NAHPU-to-Darwin
 Core field mapping are maintained in the [Persistence data documentation](https://nahpu.app/en/contributing/code/database/).
 
-Version 0.4 maps only fields with an exact semantic equivalent. Callers should
-emit fields without an exact mapping in the `nahpu:` namespace. Weight
-measurements expose a `measurement_unit_source` so each record can preserve
-its selected `g`, `kg`, or `lbs` unit. Verbatim coordinate fields and
-determiner identifiers use their current Darwin Core terms.
+Version 0.5 maps only fields with an exact semantic equivalent. Unmapped
+fields use `nahpu:<table>.<column>`. The generic JSON and XML converters use
+that fallback directly; if populated source fields would collide on one
+standard term, each value stays under its NAHPU key instead of being
+overwritten. Weight measurements expose a `measurement_unit_source` so each
+record can preserve its selected `g`, `kg`, or `lbs` unit. Verbatim coordinate
+fields and determiner identifiers use their current Darwin Core terms.
 The audit follows the normative
 [Darwin Core List of Terms](https://dwc.tdwg.org/list/); terms that do not exist
 there are not generated.

@@ -42,7 +42,7 @@ mod tests {
 
         assert_eq!(result["dwc:projectID"], json!("1234-5678"));
         assert_eq!(result["dwc:projectTitle"], json!("My Project"));
-        assert_eq!(result["unmappedField"], json!("Data")); // Falls back to original camelCase name
+        assert_eq!(result["nahpu:project.unmappedField"], json!("Data"));
         assert!(result.get("nullField").is_none()); // Nulls are excluded
     }
 }
