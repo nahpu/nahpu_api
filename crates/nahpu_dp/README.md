@@ -6,14 +6,17 @@ Frictionless Data Package containing:
 - `datapackage.json`;
 - `nahpu.toml`;
 - the versioned `nahpu-project.json` payload used by NAHPU project transfers;
-- CSV representations of the project-transfer tables;
+- CSV representations of populated project-transfer tables;
 - a CSV mapping each SQLite enum index to its code and display name;
 - CSV snapshots of the site, event, and specimen controlled vocabularies;
 - versioned user configurations;
 - available project media and user files.
 
 Packages can be written as standard ZIP archives or tar archives compressed
-with gzip.
+with gzip. Empty project tables are omitted from the archive and its
+Frictionless descriptor. The complete project-transfer JSON remains available
+for round-tripping, while the typed, relational CSV resources are suitable for
+downstream data analysis.
 
 ```rust
 use nahpu_dp::{ArchiveFormat, PackageRequest};

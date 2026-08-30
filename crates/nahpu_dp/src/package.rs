@@ -256,7 +256,7 @@ fn build_manifest(request: &PackageRequest) -> PackageManifest {
     if request.database_schema_path.is_some() {
         files.push(metadata_file("schemas/tables.drift", "text/plain"));
     }
-    for table in &request.tables {
+    for table in populated_tables(request) {
         files.push(ManifestFile {
             path: format!("tables/{}.csv", table.name),
             media_type: "text/csv".to_string(),
@@ -320,7 +320,7 @@ fn write_package(request: &PackageRequest, output_path: &Path) -> Result<Package
             fs::copy(schema_path, staging.join("schemas/tables.drift")).map_err(io_error)?;
         }
 
-        for table in &request.tables {
+        for table in populated_tables(request) {
             write_table(&staging, table)?;
         }
         write_enum_mappings(&staging, &request.enum_mappings)?;
@@ -437,10 +437,9 @@ fn write_controlled_vocabularies(
 }
 
 fn data_package_json(request: &PackageRequest) -> Value {
-    let mut resources = request
-        .tables
-        .iter()
-        .map(table_resource)
+    let table_names = populated_table_names(request);
+    let mut resources = populated_tables(request)
+        .map(|table| table_resource(table, &table_names))
         .collect::<Vec<_>>();
     resources.extend([
         enum_mapping_resource(),
@@ -493,7 +492,7 @@ fn data_package_json(request: &PackageRequest) -> Value {
     })
 }
 
-fn table_resource(table: &PackageTable) -> Value {
+fn table_resource(table: &PackageTable, table_names: &BTreeSet<&str>) -> Value {
     let fields = table
         .columns
         .iter()
@@ -517,6 +516,7 @@ fn table_resource(table: &PackageTable) -> Value {
     let foreign_keys = table
         .foreign_keys
         .iter()
+        .filter(|foreign_key| table_names.contains(foreign_key.resource.as_str()))
         .map(|foreign_key| {
             serde_json::json!({
                 "fields": foreign_key.fields,
@@ -620,7 +620,7 @@ fn nahpu_toml(request: &PackageRequest) -> String {
         request.user_config_schema_version,
         PROJECT_PATH,
         ENUM_MAPPING_PATH,
-        request.tables.len(),
+        populated_tables(request).count(),
         request.enum_mappings.len(),
         request.controlled_vocabularies.len(),
         vocabulary_path("site"),
@@ -1005,6 +1005,16 @@ fn package_name(value: &str) -> String {
         .to_string()
 }
 
+fn populated_tables(request: &PackageRequest) -> impl Iterator<Item = &PackageTable> {
+    request.tables.iter().filter(|table| !table.rows.is_empty())
+}
+
+fn populated_table_names(request: &PackageRequest) -> BTreeSet<&str> {
+    populated_tables(request)
+        .map(|table| table.name.as_str())
+        .collect()
+}
+
 fn toml_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
@@ -1199,6 +1209,34 @@ mod tests {
         }
     }
 
+    fn add_specimen_with_empty_event(request: &mut PackageRequest) {
+        let row = BTreeMap::from([
+            ("id".to_string(), Value::from(1)),
+            ("iDConfidence".to_string(), Value::from(0)),
+        ]);
+        let specimen = request
+            .tables
+            .iter_mut()
+            .find(|table| table.name == "specimen")
+            .unwrap();
+        specimen.columns.push(PackageColumn {
+            name: "collEventID".to_string(),
+            data_type: "INT".to_string(),
+            required: false,
+            primary_key: false,
+        });
+        specimen.foreign_keys.push(PackageForeignKey {
+            fields: "collEventID".to_string(),
+            resource: "collEvent".to_string(),
+            reference_fields: "id".to_string(),
+        });
+        specimen.rows.push(row.clone());
+
+        let mut project_json: Value = serde_json::from_str(&request.project_json).unwrap();
+        project_json["records"]["specimen"] = serde_json::to_value([row]).unwrap();
+        request.project_json = serde_json::to_string_pretty(&project_json).unwrap();
+    }
+
     #[test]
     fn validates_all_required_tables() {
         let directory = tempdir().unwrap();
@@ -1372,14 +1410,31 @@ mod tests {
     fn writes_zip_and_tar_gzip_packages() {
         let directory = tempdir().unwrap();
         for format in [ArchiveFormat::Zip, ArchiveFormat::TarGzip] {
-            let request = request(directory.path(), format.clone());
+            let mut request = request(directory.path(), format.clone());
+            add_specimen_with_empty_event(&mut request);
             let extension = match format {
                 ArchiveFormat::Zip => "zip",
                 ArchiveFormat::TarGzip => "tar.gz",
             };
             let output = directory.path().join(format!("package.{extension}"));
-            write_package(&request, &output).unwrap();
+            let planned_paths = build_manifest(&request)
+                .files
+                .into_iter()
+                .map(|file| file.path)
+                .collect::<BTreeSet<_>>();
+            assert!(planned_paths.contains("tables/project.csv"));
+            assert!(planned_paths.contains("tables/specimen.csv"));
+            assert!(!planned_paths.contains("tables/site.csv"));
+            assert!(!planned_paths.contains("tables/collEvent.csv"));
+
+            let manifest = write_package(&request, &output).unwrap();
             assert!(output.is_file());
+            let written_paths = manifest
+                .files
+                .into_iter()
+                .map(|file| file.path)
+                .collect::<BTreeSet<_>>();
+            assert_eq!(written_paths, planned_paths);
 
             let extracted = directory.path().join(format!("extracted-{extension}"));
             match format {
@@ -1399,9 +1454,10 @@ mod tests {
             for section in VOCABULARY_SECTIONS {
                 assert!(extracted.join(vocabulary_path(section)).is_file());
             }
-            for table in REQUIRED_NAHPU_TABLES {
-                assert!(extracted.join(format!("tables/{table}.csv")).is_file());
-            }
+            assert!(extracted.join("tables/project.csv").is_file());
+            assert!(extracted.join("tables/specimen.csv").is_file());
+            assert!(!extracted.join("tables/site.csv").exists());
+            assert!(!extracted.join("tables/collEvent.csv").exists());
             let mappings = fs::read_to_string(extracted.join(ENUM_MAPPING_PATH)).unwrap();
             assert!(mappings.contains("sqlite_index,enum_name,display_name"));
             assert!(mappings.contains("IdentificationConfidence,0,low,Low"));
@@ -1413,6 +1469,7 @@ mod tests {
             assert!(metadata.contains("project = \"nahpu-project.json\""));
             assert!(metadata.contains("user_configs = 1"));
             assert!(metadata.contains("enum_mappings = \"mappings/sqlite_enums.csv\""));
+            assert!(metadata.contains("table_count = 2"));
             assert!(metadata.contains("\"nahpu_dp\" = \"0.1.0\""));
             let descriptor: Value =
                 serde_json::from_slice(&fs::read(extracted.join("datapackage.json")).unwrap())
@@ -1426,9 +1483,39 @@ mod tests {
             assert!(resource_paths.contains(PROJECT_PATH));
             assert!(!resource_paths.contains("database/nahpu.sqlite3"));
             assert!(resource_paths.contains(ENUM_MAPPING_PATH));
+            assert!(resource_paths.contains("tables/project.csv"));
+            assert!(resource_paths.contains("tables/specimen.csv"));
+            assert!(!resource_paths.contains("tables/site.csv"));
+            assert!(!resource_paths.contains("tables/collEvent.csv"));
             for section in VOCABULARY_SECTIONS {
                 assert!(resource_paths.contains(vocabulary_path(section).as_str()));
             }
+            let resource_names = descriptor["resources"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|resource| resource["name"].as_str())
+                .collect::<BTreeSet<_>>();
+            for resource in descriptor["resources"].as_array().unwrap() {
+                let Some(foreign_keys) = resource["schema"]["foreignKeys"].as_array() else {
+                    continue;
+                };
+                for foreign_key in foreign_keys {
+                    let target = foreign_key["reference"]["resource"].as_str().unwrap();
+                    assert!(resource_names.contains(target));
+                }
+            }
+            let specimen_resource = descriptor["resources"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|resource| resource["name"] == "specimen")
+                .unwrap();
+            assert!(specimen_resource["schema"].get("foreignKeys").is_none());
+            assert_eq!(
+                fs::read_to_string(extracted.join(vocabulary_path("parasites"))).unwrap(),
+                "config_key,vocabulary_name,list_index,value\n"
+            );
         }
     }
 }

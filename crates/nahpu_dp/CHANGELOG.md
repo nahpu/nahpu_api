@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3
+
+- Omit empty project tables from NAHPU Data Package archives and descriptors.
+- Remove foreign-key descriptors whose target table is not exported.
+- Bump the NAHPU Data Package format contract to 3.3.
+
 ## 0.3.2
 
 - Treat feature-specific NAHPU Data Package tables as optional.
