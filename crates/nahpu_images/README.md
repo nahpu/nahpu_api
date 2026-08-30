@@ -1,8 +1,9 @@
 # NAHPU Images
 
 `nahpu_images` provides static JPEG, PNG, and WebP conversion and high-quality resizing for
-NAHPU. It supports in-memory processing and safe path-based output, preserves EXIF metadata, and
-normalizes camera orientation before transforming pixels.
+NAHPU. It supports in-memory processing and safe path-based output, preserves EXIF metadata in
+JPEG and PNG output, and normalizes camera orientation before transforming pixels. WebP output
+omits EXIF because reinserting it into a lossless WebP container can make the image invalid.
 
 ```rust
 use nahpu_images::{ImageFileFormat, ImageOptions, ImageProcessor, ResizeOptions};

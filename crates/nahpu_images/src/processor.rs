@@ -16,35 +16,50 @@ use tempfile::Builder;
 
 use crate::{
     ImageError, ImageFileFormat, ImageInfo, ImageOptions, ProcessedImage, ResizeMode,
-    ResizeOptions, RgbColor, metadata::exif,
+    ResizeOptions, RgbColor, SourceImageInfo, metadata::exif,
 };
 
 /// Stateless entry point for image conversion and resizing.
 pub struct ImageProcessor;
 
 impl ImageProcessor {
-    /// Converts and optionally resizes an encoded image held in memory.
-    pub fn process_bytes(input: &[u8], options: &ImageOptions) -> Result<ProcessedImage, ImageError> {
-        validate_options(options)?;
-        let source_format = detect_format(input)?;
-        reject_animation(input, source_format)?;
+    /// Inspects an encoded image without writing or re-encoding it.
+    pub fn inspect_bytes(input: &[u8]) -> Result<SourceImageInfo, ImageError> {
+        let decoded = decode(input)?;
+        let (width, height) = decoded.image.dimensions();
+        Ok(SourceImageInfo {
+            format: decoded.source_format,
+            width,
+            height,
+        })
+    }
 
-        let reader = ImageReader::with_format(Cursor::new(input), image_format(source_format));
-        let mut decoder = reader.into_decoder().map_err(ImageError::Decode)?;
-        let orientation = decoder.orientation().map_err(ImageError::Decode)?;
-        let has_exif = decoder
-            .exif_metadata()
-            .map_err(ImageError::Decode)?
-            .is_some();
-        let mut image = DynamicImage::from_decoder(decoder).map_err(ImageError::Decode)?;
-        image.apply_orientation(orientation);
+    /// Inspects an image file without writing or re-encoding it.
+    pub fn inspect_file(input_path: impl AsRef<Path>) -> Result<SourceImageInfo, ImageError> {
+        let input_path = input_path.as_ref();
+        let input = read_input(input_path)?;
+        Self::inspect_bytes(&input)
+    }
+
+    /// Converts and optionally resizes an encoded image held in memory.
+    pub fn process_bytes(
+        input: &[u8],
+        options: &ImageOptions,
+    ) -> Result<ProcessedImage, ImageError> {
+        validate_options(options)?;
+        let decoded = decode(input)?;
+        let source_format = decoded.source_format;
+        let has_exif = decoded.has_exif;
+        let image = decoded.image;
 
         let (source_width, source_height) = image.dimensions();
         let image = resize_image(image, options.resize);
         let (output_width, output_height) = image.dimensions();
         let mut bytes = encode(&image, options)?;
 
-        let exif_preserved = if has_exif {
+        // little_exif currently corrupts the VP8X dimensions when it adds EXIF to a lossless
+        // WebP. A valid image is more important than retaining metadata in that output format.
+        let exif_preserved = if has_exif && options.output_format != ImageFileFormat::WebP {
             let mut metadata = exif::read(input, source_format)?;
             exif::normalize(&mut metadata, output_width, output_height);
             exif::write(&metadata, &mut bytes, options.output_format)?;
@@ -89,11 +104,7 @@ impl ImageProcessor {
             return Err(ImageError::DestinationExists(output_path.to_path_buf()));
         }
 
-        let input = fs::read(input_path).map_err(|source| ImageError::Io {
-            operation: "read input image",
-            path: input_path.to_path_buf(),
-            source,
-        })?;
+        let input = read_input(input_path)?;
         let processed = Self::process_bytes(&input, options)?;
         let parent = output_path.parent().unwrap_or_else(|| Path::new("."));
         let mut temporary = Builder::new()
@@ -123,8 +134,43 @@ impl ImageProcessor {
     }
 }
 
+struct DecodedImage {
+    source_format: ImageFileFormat,
+    image: DynamicImage,
+    has_exif: bool,
+}
+
+fn read_input(input_path: &Path) -> Result<Vec<u8>, ImageError> {
+    fs::read(input_path).map_err(|source| ImageError::Io {
+        operation: "read input image",
+        path: input_path.to_path_buf(),
+        source,
+    })
+}
+
+fn decode(input: &[u8]) -> Result<DecodedImage, ImageError> {
+    let source_format = detect_format(input)?;
+    reject_animation(input, source_format)?;
+
+    let reader = ImageReader::with_format(Cursor::new(input), image_format(source_format));
+    let mut decoder = reader.into_decoder().map_err(ImageError::Decode)?;
+    let orientation = decoder.orientation().map_err(ImageError::Decode)?;
+    let has_exif = decoder
+        .exif_metadata()
+        .map_err(ImageError::Decode)?
+        .is_some();
+    let mut image = DynamicImage::from_decoder(decoder).map_err(ImageError::Decode)?;
+    image.apply_orientation(orientation);
+    Ok(DecodedImage {
+        source_format,
+        image,
+        has_exif,
+    })
+}
+
 fn validate_options(options: &ImageOptions) -> Result<(), ImageError> {
-    if options.output_format == ImageFileFormat::Jpeg && !(1..=100).contains(&options.jpeg_quality) {
+    if options.output_format == ImageFileFormat::Jpeg && !(1..=100).contains(&options.jpeg_quality)
+    {
         return Err(ImageError::InvalidOptions(
             "JPEG quality must be between 1 and 100".to_owned(),
         ));
@@ -138,11 +184,9 @@ fn validate_options(options: &ImageOptions) -> Result<(), ImageError> {
         ));
     }
     match resize.mode {
-        ResizeMode::Fit if resize.width.is_none() && resize.height.is_none() => {
-            Err(ImageError::InvalidOptions(
-                "fit resizing requires a width or height bound".to_owned(),
-            ))
-        }
+        ResizeMode::Fit if resize.width.is_none() && resize.height.is_none() => Err(
+            ImageError::InvalidOptions("fit resizing requires a width or height bound".to_owned()),
+        ),
         ResizeMode::Fill | ResizeMode::Exact
             if resize.width.is_none() || resize.height.is_none() =>
         {
@@ -189,12 +233,8 @@ fn resize_image(image: DynamicImage, resize: Option<ResizeOptions>) -> DynamicIm
     let (target_width, target_height) = target_dimensions(source_width, source_height, resize);
     match resize.mode {
         ResizeMode::Fit => image.resize(target_width, target_height, FilterType::Lanczos3),
-        ResizeMode::Fill => {
-            image.resize_to_fill(target_width, target_height, FilterType::Lanczos3)
-        }
-        ResizeMode::Exact => {
-            image.resize_exact(target_width, target_height, FilterType::Lanczos3)
-        }
+        ResizeMode::Fill => image.resize_to_fill(target_width, target_height, FilterType::Lanczos3),
+        ResizeMode::Exact => image.resize_exact(target_width, target_height, FilterType::Lanczos3),
     }
 }
 

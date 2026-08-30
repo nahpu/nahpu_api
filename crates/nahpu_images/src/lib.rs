@@ -13,6 +13,7 @@ pub use error::ImageError;
 pub use processor::ImageProcessor;
 pub use types::{
     ImageFileFormat, ImageInfo, ImageOptions, ProcessedImage, ResizeMode, ResizeOptions, RgbColor,
+    SourceImageInfo,
 };
 
 /// Version of the compiled `nahpu_images` crate.

@@ -152,6 +152,17 @@ impl ImageOptions {
     }
 }
 
+/// Detected properties of a decoded source image.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceImageInfo {
+    /// Detected source format.
+    pub format: ImageFileFormat,
+    /// Pixel width after applying EXIF orientation.
+    pub width: u32,
+    /// Pixel height after applying EXIF orientation.
+    pub height: u32,
+}
+
 /// Metadata describing an image processing result.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageInfo {
@@ -171,7 +182,7 @@ pub struct ImageInfo {
     pub output_bytes: u64,
     /// Whether the output dimensions differ from the oriented source dimensions.
     pub resized: bool,
-    /// Whether source EXIF metadata was present and copied to the output.
+    /// Whether source EXIF metadata was present and copied to a supported output format.
     pub exif_preserved: bool,
 }
 

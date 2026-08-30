@@ -1,8 +1,7 @@
-use std::{fs, io::Cursor};
+use std::fs;
 
 use image::{
-    DynamicImage, ExtendedColorType, GenericImageView, ImageEncoder, ImageFormat, Rgba,
-    RgbaImage,
+    DynamicImage, ExtendedColorType, GenericImageView, ImageEncoder, ImageFormat, Rgba, RgbaImage,
     codecs::{jpeg::JpegEncoder, png::PngEncoder, webp::WebPEncoder},
 };
 use little_exif::{exif_tag::ExifTag, filetype::FileExtension, metadata::Metadata};
@@ -21,15 +20,15 @@ fn converts_every_supported_input_to_every_supported_output() {
     for source_format in formats {
         let source = encode_fixture(source_format, false);
         for output_format in formats {
-            let result = ImageProcessor::process_bytes(
-                &source,
-                &ImageOptions::new(output_format),
-            )
-            .expect("supported conversion should succeed");
+            let result = ImageProcessor::process_bytes(&source, &ImageOptions::new(output_format))
+                .expect("supported conversion should succeed");
 
             assert_eq!(result.info.source_format, source_format);
             assert_eq!(result.info.output_format, output_format);
-            assert_eq!((result.info.output_width, result.info.output_height), (8, 4));
+            assert_eq!(
+                (result.info.output_width, result.info.output_height),
+                (8, 4)
+            );
             assert_eq!(detected_format(&result.bytes), image_format(output_format));
             assert_eq!(
                 image::load_from_memory(&result.bytes)
@@ -42,16 +41,28 @@ fn converts_every_supported_input_to_every_supported_output() {
 }
 
 #[test]
+fn inspects_oriented_dimensions_without_writing_output() {
+    let mut source = encode_fixture(ImageFileFormat::Jpeg, false);
+    let mut metadata = Metadata::new();
+    metadata.set_tag(ExifTag::Orientation(vec![6]));
+    metadata
+        .write_to_vec(&mut source, FileExtension::JPEG)
+        .expect("fixture EXIF should write");
+
+    let info = ImageProcessor::inspect_bytes(&source).expect("image inspection should work");
+
+    assert_eq!(info.format, ImageFileFormat::Jpeg);
+    assert_eq!((info.width, info.height), (4, 8));
+}
+
+#[test]
 fn supports_fit_fill_exact_and_explicit_upscaling() {
     let source = encode_fixture(ImageFileFormat::Png, false);
     let cases = [
         (ResizeOptions::fit(Some(4), Some(4)), (4, 2)),
         (ResizeOptions::fill(3, 3), (3, 3)),
         (ResizeOptions::exact(3, 2), (3, 2)),
-        (
-            ResizeOptions::exact(16, 12).with_upscaling(true),
-            (16, 12),
-        ),
+        (ResizeOptions::exact(16, 12).with_upscaling(true), (16, 12)),
         (ResizeOptions::exact(16, 12), (8, 4)),
     ];
 
@@ -61,7 +72,10 @@ fn supports_fit_fill_exact_and_explicit_upscaling() {
             &ImageOptions::new(ImageFileFormat::Png).with_resize(resize),
         )
         .expect("resize should succeed");
-        assert_eq!((result.info.output_width, result.info.output_height), expected);
+        assert_eq!(
+            (result.info.output_width, result.info.output_height),
+            expected
+        );
     }
 }
 
@@ -140,13 +154,18 @@ fn normalizes_orientation_and_preserves_exif_across_formats() {
 
     let result = ImageProcessor::process_bytes(
         &source,
-        &ImageOptions::new(ImageFileFormat::Png)
-            .with_resize(ResizeOptions::fit(Some(2), Some(2))),
+        &ImageOptions::new(ImageFileFormat::Png).with_resize(ResizeOptions::fit(Some(2), Some(2))),
     )
     .expect("oriented image should process");
 
-    assert_eq!((result.info.source_width, result.info.source_height), (4, 8));
-    assert_eq!((result.info.output_width, result.info.output_height), (1, 2));
+    assert_eq!(
+        (result.info.source_width, result.info.source_height),
+        (4, 8)
+    );
+    assert_eq!(
+        (result.info.output_width, result.info.output_height),
+        (1, 2)
+    );
     assert!(result.info.exif_preserved);
 
     let output_metadata = Metadata::new_from_vec(
@@ -175,6 +194,24 @@ fn normalizes_orientation_and_preserves_exif_across_formats() {
 }
 
 #[test]
+fn webp_output_from_exif_source_is_decodable() {
+    let mut source = encode_fixture(ImageFileFormat::Jpeg, false);
+    let mut metadata = Metadata::new();
+    metadata.set_tag(ExifTag::ImageDescription("NAHPU WebP export".to_owned()));
+    metadata
+        .write_to_vec(&mut source, FileExtension::JPEG)
+        .expect("fixture EXIF should write");
+
+    let result = ImageProcessor::process_bytes(&source, &ImageOptions::new(ImageFileFormat::WebP))
+        .expect("WebP conversion should work");
+
+    let decoded = image::load_from_memory_with_format(&result.bytes, ImageFormat::WebP)
+        .expect("WebP output should decode");
+    assert_eq!(decoded.dimensions(), (8, 4));
+    assert!(!result.info.exif_preserved);
+}
+
+#[test]
 fn path_api_protects_destinations_and_supports_in_place_processing() {
     let directory = tempfile::tempdir().expect("temporary directory should exist");
     let input_path = directory.path().join("input.png");
@@ -187,22 +224,23 @@ fn path_api_protects_destinations_and_supports_in_place_processing() {
     let error = ImageProcessor::process_file(&input_path, &output_path, &options, false)
         .expect_err("existing destination should be protected");
     assert!(matches!(error, ImageError::DestinationExists(_)));
-    assert_eq!(fs::read(&output_path).expect("output should remain"), b"keep me");
+    assert_eq!(
+        fs::read(&output_path).expect("output should remain"),
+        b"keep me"
+    );
 
     let info = ImageProcessor::process_file(&input_path, &output_path, &options, true)
         .expect("explicit overwrite should work");
     assert_eq!(info.output_format, ImageFileFormat::WebP);
-    assert_eq!(detected_format(&fs::read(&output_path).expect("output should exist")), ImageFormat::WebP);
+    assert_eq!(
+        detected_format(&fs::read(&output_path).expect("output should exist")),
+        ImageFormat::WebP
+    );
 
-    let in_place_options = ImageOptions::new(ImageFileFormat::Png)
-        .with_resize(ResizeOptions::exact(4, 2));
-    let info = ImageProcessor::process_file(
-        &input_path,
-        &input_path,
-        &in_place_options,
-        true,
-    )
-    .expect("in-place processing should work");
+    let in_place_options =
+        ImageOptions::new(ImageFileFormat::Png).with_resize(ResizeOptions::exact(4, 2));
+    let info = ImageProcessor::process_file(&input_path, &input_path, &in_place_options, true)
+        .expect("in-place processing should work");
     assert_eq!((info.output_width, info.output_height), (4, 2));
 }
 
@@ -227,11 +265,13 @@ fn path_api_validates_extension_before_writing() {
 
 #[test]
 fn rejects_unsupported_or_malformed_input_without_creating_output() {
-    let error = ImageProcessor::process_bytes(
-        b"not an image",
-        &ImageOptions::new(ImageFileFormat::Png),
-    )
-    .expect_err("invalid input should fail");
+    let inspect_error = ImageProcessor::inspect_bytes(b"not an image")
+        .expect_err("invalid input inspection should fail");
+    assert!(matches!(inspect_error, ImageError::UnsupportedFormat));
+
+    let error =
+        ImageProcessor::process_bytes(b"not an image", &ImageOptions::new(ImageFileFormat::Png))
+            .expect_err("invalid input should fail");
     assert!(matches!(error, ImageError::UnsupportedFormat));
 
     let directory = tempfile::tempdir().expect("temporary directory should exist");
