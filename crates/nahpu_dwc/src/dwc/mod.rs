@@ -4,6 +4,8 @@
 //! to the Darwin Core standard terms. This mapping is manually defined based on
 //! the [persistence data documentation](https://nahpu.app/en/contributing/code/database/).
 
+pub mod terms;
+
 /// A utility struct for mapping NAHPU schema names to Darwin Core terms.
 pub struct DwcMapper;
 
@@ -635,85 +637,15 @@ impl DwcMapper {
 #[cfg(test)]
 mod tests {
     use super::DwcMapper;
+    use crate::dwc::terms::TermRegistry;
 
-    const CURRENT_DWC_TERMS_USED_BY_NAHPU: &[&str] = &[
-        "dwc:agentID",
-        "dwc:agentRemarks",
-        "dwc:associatedTaxa",
-        "dwc:catalogNumber",
-        "dwc:caste",
-        "dwc:class",
-        "dwc:coordinateUncertaintyInMeters",
-        "dwc:country",
-        "dwc:county",
-        "dwc:datasetID",
-        "dwc:decimalLatitude",
-        "dwc:decimalLongitude",
-        "dwc:earliestAgeOrLowestStage",
-        "dwc:eventDate",
-        "dwc:eventID",
-        "dwc:eventRemarks",
-        "dwc:eventTime",
-        "dwc:family",
-        "dwc:formation",
-        "dwc:genus",
-        "dwc:geodeticDatum",
-        "dwc:georeferenceRemarks",
-        "dwc:habitat",
-        "dwc:higherClassification",
-        "dwc:identificationType",
-        "dwc:identificationVerificationStatus",
-        "dwc:identifiedBy",
-        "dwc:identifiedByID",
-        "dwc:individualCount",
-        "dwc:infraspecificEpithet",
-        "dwc:islandGroup",
-        "dwc:kingdom",
-        "dwc:latestAgeOrHighestStage",
-        "dwc:lifeStage",
-        "dwc:locationID",
-        "dwc:locationRemarks",
-        "dwc:materialEntityRemarks",
-        "dwc:materialEntityType",
-        "dwc:materialSampleID",
-        "dwc:maximumElevationInMeters",
-        "dwc:measurementType",
-        "dwc:measurementUnit",
-        "dwc:measurementValue",
-        "dwc:minimumElevationInMeters",
-        "dwc:municipality",
-        "dwc:objectQuantity",
-        "dwc:objectQuantityType",
-        "dwc:occurrenceID",
-        "dwc:occurrenceRemarks",
-        "dwc:order",
-        "dwc:otherCatalogNumbers",
-        "dwc:phylum",
-        "dwc:preparations",
-        "dwc:preferredAgentName",
-        "dwc:projectID",
-        "dwc:projectTitle",
-        "dwc:recordNumber",
-        "dwc:recordedBy",
-        "dwc:recordedByID",
-        "dwc:reproductiveCondition",
-        "dwc:samplingEffort",
-        "dwc:samplingProtocol",
-        "dwc:scientificName",
-        "dwc:scientificNameAuthorship",
-        "dwc:sex",
-        "dwc:specificEpithet",
-        "dwc:stateProvince",
-        "dwc:taxonID",
-        "dwc:taxonRank",
-        "dwc:taxonRemarks",
-        "dwc:verbatimLocality",
-        "dwc:verbatimLatitude",
-        "dwc:verbatimLongitude",
-        "dwc:verbatimCoordinates",
-        "dwc:verbatimCoordinateSystem",
-        "dwc:vernacularName",
-    ];
+    /// Prefixes the tabular mapper still writes as `dwc:` even though the term is
+    /// published in another namespace.
+    ///
+    /// The bundle writers resolve every column through `TermRegistry`, so these appear in
+    /// flat preset exports only. Changing them renames columns in saved user presets, so
+    /// the migration is deliberately kept out of the bundle audit.
+    const LEGACY_DWC_PREFIXED_TERMS: &[&str] = &["dwc:preferredAgentName"];
 
     #[test]
     fn mapped_dwc_terms_match_the_current_official_term_names() {
@@ -793,12 +725,13 @@ mod tests {
             let Some(term) = DwcMapper::get_dwc_term_for_source_key(source_key) else {
                 panic!("expected a mapping for {source_key}");
             };
-            if term.starts_with("dwc:") {
-                assert!(
-                    CURRENT_DWC_TERMS_USED_BY_NAHPU.contains(&term),
-                    "{term} is not an approved current Darwin Core term"
-                );
+            if LEGACY_DWC_PREFIXED_TERMS.contains(&term) {
+                continue;
             }
+            assert!(
+                TermRegistry::is_registered_prefixed(term),
+                "{term} is not a registered standard term"
+            );
         }
     }
 
@@ -878,8 +811,9 @@ mod tests {
                 "unexpected mapping for {source_key}",
             );
             assert!(
-                CURRENT_DWC_TERMS_USED_BY_NAHPU.contains(&expected),
-                "{expected} must be a current Darwin Core term",
+                LEGACY_DWC_PREFIXED_TERMS.contains(&expected)
+                    || TermRegistry::is_registered_prefixed(expected),
+                "{expected} must be a registered standard term",
             );
         }
 

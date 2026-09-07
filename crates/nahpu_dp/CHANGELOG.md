@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.4
+
+- Accept an empty SQLite enum mapping list. The list is scoped to the tables a
+  package carries, so a project with no enum-bearing rows declares none.
+
 ## 0.3.3
 
 - Omit empty project tables from NAHPU Data Package archives and descriptors.

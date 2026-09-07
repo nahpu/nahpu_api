@@ -17,10 +17,82 @@ use nahpu_archive::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::dwc::terms::{BundleProfile, BundleTerm, TermRegistry};
+
 const DWC_DP_PROFILE: &str = "http://rs.tdwg.org/dwc-dp/1.0/dwc-dp-profile.json";
-const DWC_TERMS: &str = "http://rs.tdwg.org/dwc/terms/";
-const DCTERMS: &str = "http://purl.org/dc/terms/";
-const AC_TERMS: &str = "http://rs.tdwg.org/ac/terms/";
+
+/// Occurrence values the Data Package carries on its `identification` table instead.
+const IDENTIFICATION_ONLY_FIELDS: &[&str] = &[
+    "class",
+    "family",
+    "genus",
+    "identificationType",
+    "infraspecificEpithet",
+    "kingdom",
+    "order",
+    "phylum",
+    "specificEpithet",
+    "taxonRemarks",
+];
+
+/// Determination values the Data Package repeats on `occurrence` and `identification`.
+const IDENTIFICATION_SHARED_FIELDS: &[&str] = &[
+    "identificationVerificationStatus",
+    "identifiedBy",
+    "identifiedByID",
+    "scientificName",
+    "scientificNameAuthorship",
+    "taxonID",
+    "taxonRank",
+    "vernacularName",
+];
+
+/// Occurrence values the Data Package carries on its `event` table instead.
+const EVENT_LOCATION_FIELDS: &[&str] = &[
+    "coordinateUncertaintyInMeters",
+    "decimalLatitude",
+    "decimalLongitude",
+    "geodeticDatum",
+    "georeferenceRemarks",
+    "locationRemarks",
+    "maximumElevationInMeters",
+    "minimumElevationInMeters",
+    "verbatimCoordinateSystem",
+    "verbatimCoordinates",
+    "verbatimLatitude",
+    "verbatimLongitude",
+];
+
+/// Occurrence values the Data Package already represents in another table or class.
+const OCCURRENCE_FIELDS_REPRESENTED_ELSEWHERE: &[&str] = &[
+    "associatedOccurrences",
+    "basisOfRecord",
+    "country",
+    "county",
+    "habitat",
+    "islandGroup",
+    "locality",
+    "municipality",
+    "recordedBy",
+    "recordedByID",
+    "stateProvince",
+];
+
+/// Specimen values the Data Package keeps as assertions when no material row carries them.
+const OCCURRENCE_FIELDS_KEPT_AS_ASSERTIONS: &[(&str, &str)] = &[
+    ("catalogNumber", "catalog number"),
+    ("eventDate", "collection date"),
+    ("eventTime", "collection time"),
+    ("otherCatalogNumbers", "other catalog numbers"),
+    ("preparations", "preparations"),
+    ("samplingProtocol", "sampling protocol"),
+];
+
+/// Event values the Data Package keeps as assertions rather than as event columns.
+const EVENT_FIELDS_KEPT_AS_ASSERTIONS: &[(&str, &str)] = &[
+    ("samplingEffort", "sampling effort"),
+    ("samplingProtocol", "sampling protocol"),
+];
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -114,13 +186,40 @@ pub struct BundleManifest {
     pub warnings: Vec<String>,
 }
 
+/// One registered column of a bundle table, with the term URI it is published under.
+#[derive(Clone, Debug)]
+struct Column {
+    header: String,
+    term_uri: String,
+    integer: bool,
+}
+
+impl Column {
+    fn new(term: &BundleTerm) -> Self {
+        Self {
+            header: term.header.to_string(),
+            term_uri: TermRegistry::term_uri(term),
+            integer: term.integer,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct Table {
     name: &'static str,
     row_type: &'static str,
     core: bool,
-    headers: Vec<String>,
+    columns: Vec<Column>,
     rows: Vec<BTreeMap<String, String>>,
+}
+
+impl Table {
+    fn headers(&self) -> Vec<&str> {
+        self.columns
+            .iter()
+            .map(|column| column.header.as_str())
+            .collect()
+    }
 }
 
 /// Returns a deterministic file manifest without creating a bundle.
@@ -131,7 +230,10 @@ pub fn plan_bundle_json(input_json: &str) -> Result<String, String> {
     serde_json::to_string(&manifest).map_err(|error| error.to_string())
 }
 
-/// Writes a standards-shaped Darwin Core bundle. Archives are ZIP files; Data Packages are directories.
+/// Writes a standards-shaped Darwin Core bundle.
+///
+/// Archives are always ZIP files; Data Packages are gzipped tarballs unless the request
+/// asks for ZIP.
 pub fn write_bundle_json(input_json: &str, output_path: &str) -> Result<String, String> {
     let request: BundleRequest =
         serde_json::from_str(input_json).map_err(|error| error.to_string())?;
@@ -155,8 +257,8 @@ pub fn validate_bundle_json(input_json: &str) -> Result<String, String> {
     {
         errors.push("Every occurrence requires an occurrenceID.".to_string());
     }
-    let tables = build_tables(&request);
-    errors.extend(validate_relationships(&tables));
+    let built = build_tables(&request);
+    errors.extend(validate_relationships(&built.tables));
     if errors.is_empty() {
         Ok("[]".to_string())
     } else {
@@ -177,7 +279,7 @@ fn build_manifest(request: &BundleRequest) -> Result<BundleManifest, String> {
     if request.occurrences.is_empty() {
         return Err("Select at least one recorded taxon before creating a bundle.".to_string());
     }
-    let tables = build_tables(request);
+    let built = build_tables(request);
     let mut files = match request.format {
         BundleFormat::DarwinCoreArchive => vec![
             BundleFile {
@@ -209,12 +311,12 @@ fn build_manifest(request: &BundleRequest) -> Result<BundleManifest, String> {
         ],
     };
     let mut media_paths = BTreeSet::new();
-    for table in tables.all() {
+    for table in built.tables.all() {
         files.push(BundleFile {
             path: format!("{}.csv", table.name),
             media_type: "text/csv".to_string(),
             records: table.rows.len(),
-            columns: table.headers.clone(),
+            columns: table.headers().into_iter().map(str::to_string).collect(),
         });
     }
     for media in &request.media {
@@ -232,6 +334,7 @@ fn build_manifest(request: &BundleRequest) -> Result<BundleManifest, String> {
         }
     }
     let mut warnings = request.warnings.clone();
+    warnings.extend(built.warnings);
     warnings.extend(media_warnings(&request.media));
     if request.format == BundleFormat::DarwinCoreDataPackage
         && request.archive_format == ArchiveFormat::Zip
@@ -259,9 +362,9 @@ fn write_archive(
     fs::create_dir_all(parent).map_err(io_error)?;
     let staging = temporary_directory(parent, "dwca")?;
     let result = (|| {
-        let tables = build_tables(request);
-        write_tables(&staging, &tables.all())?;
-        fs::write(staging.join("meta.xml"), meta_xml(&tables.all())).map_err(io_error)?;
+        let built = build_tables(request);
+        write_tables(&staging, &built.tables.all())?;
+        fs::write(staging.join("meta.xml"), meta_xml(&built.tables.all())).map_err(io_error)?;
         fs::write(staging.join("eml.xml"), eml_xml(request)).map_err(io_error)?;
         copy_media(&staging, &request.media)?;
         let files = collect_files(&staging)?;
@@ -290,10 +393,10 @@ fn write_data_package(
     fs::create_dir_all(parent).map_err(io_error)?;
     let staging = temporary_directory(parent, "dwc-dp")?;
     let result = (|| {
-        let tables = build_tables(request);
-        write_tables(&staging, &tables.all())?;
+        let built = build_tables(request);
+        write_tables(&staging, &built.tables.all())?;
         fs::write(staging.join("eml.xml"), eml_xml(request)).map_err(io_error)?;
-        let descriptor = data_package_json(request, &tables.all());
+        let descriptor = data_package_json(request, &built.tables.all());
         let descriptor =
             serde_json::to_vec_pretty(&descriptor).map_err(|error| error.to_string())?;
         fs::write(staging.join("datapackage.json"), descriptor).map_err(io_error)?;
@@ -331,6 +434,7 @@ fn write_data_package(
 
 struct Tables {
     occurrences: Table,
+    identifications: Option<Table>,
     events: Option<Table>,
     materials: Option<Table>,
     measurements: Option<Table>,
@@ -351,6 +455,7 @@ impl Tables {
     fn all(&self) -> Vec<Table> {
         let mut tables = vec![self.occurrences.clone()];
         for table in [
+            &self.identifications,
             &self.events,
             &self.materials,
             &self.measurements,
@@ -375,7 +480,22 @@ impl Tables {
     }
 }
 
-fn build_tables(request: &BundleRequest) -> Tables {
+/// The bundle tables together with the warnings raised while resolving their columns.
+struct BuiltTables {
+    tables: Tables,
+    warnings: Vec<String>,
+}
+
+fn build_tables(request: &BundleRequest) -> BuiltTables {
+    let mut builder = TableBuilder::new(&request.format);
+    let tables = bundle_tables(request, &mut builder);
+    BuiltTables {
+        tables,
+        warnings: builder.into_warnings(),
+    }
+}
+
+fn bundle_tables(request: &BundleRequest, builder: &mut TableBuilder) -> Tables {
     let occurrence_rows = normalize_rows(&request.occurrences);
     let material_rows = normalize_rows(&request.materials);
     let measurement_rows = normalize_rows(&request.measurements);
@@ -392,19 +512,66 @@ fn build_tables(request: &BundleRequest) -> Tables {
     let media_rows = normalize_rows(&raw_media_rows);
 
     if request.format == BundleFormat::DarwinCoreDataPackage {
+        let material_occurrences = material_rows
+            .iter()
+            .filter_map(|row| row.get("occurrenceID").cloned())
+            .collect::<BTreeSet<_>>();
+        let mut identifications = Vec::new();
+        let mut locations: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+        let mut relocated_assertions = Vec::new();
         let occurrences = occurrence_rows
             .into_iter()
             .map(|mut row| {
+                let occurrence_id = row.get("occurrenceID").cloned().unwrap_or_default();
+                if let Some(identification) = identification_row(&mut row, &occurrence_id) {
+                    identifications.push(identification);
+                }
+                relocate_location(&mut row, &mut locations);
+                relocated_assertions.extend(occurrence_assertions(
+                    &mut row,
+                    &occurrence_id,
+                    material_occurrences.contains(&occurrence_id),
+                ));
+                for field in OCCURRENCE_FIELDS_REPRESENTED_ELSEWHERE {
+                    row.remove(*field);
+                }
                 copy_key(&mut row, "occurrenceID", "occurrence_pk");
                 copy_key(&mut row, "eventID", "event_fk");
+                row.remove("eventID");
+                rename_key(&mut row, "individualCount", "organismQuantity");
+                if row.contains_key("organismQuantity") {
+                    row.insert(
+                        "organismQuantityType".to_string(),
+                        "individuals".to_string(),
+                    );
+                }
                 row.entry("occurrenceStatus".to_string())
                     .or_insert_with(|| "detected".to_string());
                 row
             })
             .collect();
+        let mut relocated_event_assertions = Vec::new();
         let events = normalize_rows(&request.events)
             .into_iter()
             .map(|mut row| {
+                let event_id = row.get("eventID").cloned().unwrap_or_default();
+                for (field, assertion_type) in EVENT_FIELDS_KEPT_AS_ASSERTIONS {
+                    if let Some(value) = row.remove(*field) {
+                        relocated_event_assertions.push(assertion_row(
+                            "eventID",
+                            &event_id,
+                            assertion_type,
+                            value,
+                        ));
+                    }
+                }
+                row.remove("eventConductedBy");
+                row.remove("eventConductedByID");
+                if let Some(location) = locations.get(&event_id) {
+                    for (key, value) in location {
+                        row.entry(key.clone()).or_insert_with(|| value.clone());
+                    }
+                }
                 copy_key(&mut row, "eventID", "event_pk");
                 row.entry("eventCategory".to_string())
                     .or_insert_with(|| "sampling event".to_string());
@@ -418,7 +585,9 @@ fn build_tables(request: &BundleRequest) -> Tables {
                 if let Some(event_id) = row.remove("eventID") {
                     row.insert("collectionEvent_fk".to_string(), event_id);
                 }
-                row.remove("occurrenceID");
+                if let Some(occurrence_id) = row.remove("occurrenceID") {
+                    row.insert("evidenceForOccurrence_fk".to_string(), occurrence_id);
+                }
                 row
             })
             .collect();
@@ -433,12 +602,18 @@ fn build_tables(request: &BundleRequest) -> Tables {
                 row
             })
             .collect();
-        assertions.extend(occurrence_assertion_rows.into_iter().map(|mut row| {
-            rename_key(&mut row, "occurrenceID", "occurrence_fk");
-            row
-        }));
+        assertions.extend(
+            occurrence_assertion_rows
+                .into_iter()
+                .chain(relocated_assertions)
+                .map(|mut row| {
+                    rename_key(&mut row, "occurrenceID", "occurrence_fk");
+                    row
+                }),
+        );
         let event_assertions = event_assertion_rows
             .into_iter()
+            .chain(relocated_event_assertions)
             .map(|mut row| {
                 rename_key(&mut row, "eventID", "event_fk");
                 row
@@ -505,7 +680,7 @@ fn build_tables(request: &BundleRequest) -> Tables {
             .collect();
 
         return Tables {
-            occurrences: table(
+            occurrences: builder.table(
                 "occurrence",
                 "https://rs.tdwg.org/dwc-dp/terms/Occurrence",
                 true,
@@ -517,19 +692,25 @@ fn build_tables(request: &BundleRequest) -> Tables {
                     "occurrenceStatus",
                 ],
             ),
-            events: optional_table(
+            identifications: builder.optional_table(
+                "identification",
+                "https://rs.tdwg.org/dwc-dp/terms/Identification",
+                identifications,
+                &["identification_pk", "identificationID", "occurrence_fk"],
+            ),
+            events: builder.optional_table(
                 "event",
                 "https://rs.tdwg.org/dwc-dp/terms/Event",
                 events,
                 &["event_pk", "eventID", "eventCategory"],
             ),
-            materials: optional_table(
+            materials: builder.optional_table(
                 "material",
                 "http://rs.tdwg.org/dwc/terms/MaterialEntity",
                 materials,
                 &["materialEntity_pk", "materialEntityID"],
             ),
-            measurements: optional_table(
+            measurements: builder.optional_table(
                 "occurrence-assertion",
                 "http://rs.tdwg.org/dwc/terms/Assertion",
                 assertions,
@@ -540,13 +721,13 @@ fn build_tables(request: &BundleRequest) -> Tables {
                     "assertionValue",
                 ],
             ),
-            event_assertions: optional_table(
+            event_assertions: builder.optional_table(
                 "event-assertion",
                 "http://rs.tdwg.org/dwc/terms/Assertion",
                 event_assertions,
                 &["event_fk", "assertionID", "assertionType", "assertionValue"],
             ),
-            material_assertions: optional_table(
+            material_assertions: builder.optional_table(
                 "material-assertion",
                 "http://rs.tdwg.org/dwc/terms/Assertion",
                 material_assertions,
@@ -557,7 +738,7 @@ fn build_tables(request: &BundleRequest) -> Tables {
                     "assertionValue",
                 ],
             ),
-            organism_interactions: optional_table(
+            organism_interactions: builder.optional_table(
                 "organism-interaction",
                 "https://rs.tdwg.org/dwc-dp/terms/OrganismInteraction",
                 organism_interactions,
@@ -569,7 +750,7 @@ fn build_tables(request: &BundleRequest) -> Tables {
                     "organismInteractionType",
                 ],
             ),
-            organism_interaction_assertions: optional_table(
+            organism_interaction_assertions: builder.optional_table(
                 "organism-interaction-assertion",
                 "http://rs.tdwg.org/dwc/terms/Assertion",
                 organism_interaction_assertions,
@@ -580,43 +761,43 @@ fn build_tables(request: &BundleRequest) -> Tables {
                     "assertionValue",
                 ],
             ),
-            media: optional_table(
+            media: builder.optional_table(
                 "media",
                 "http://rs.tdwg.org/ac/terms/Media",
                 media,
                 &["media_pk", "mediaID"],
             ),
-            agents: optional_table(
+            agents: builder.optional_table(
                 "agent",
                 "http://purl.org/dc/terms/Agent",
                 agents,
                 &["agent_pk", "agentID", "agentType", "preferredAgentName"],
             ),
-            occurrence_agent_roles: role_table(
+            occurrence_agent_roles: builder.role_table(
                 "occurrence-agent-role",
                 normalize_rows(&request.occurrence_agent_roles),
                 "occurrenceID",
                 "occurrence_fk",
             ),
-            event_agent_roles: role_table(
+            event_agent_roles: builder.role_table(
                 "event-agent-role",
                 normalize_rows(&request.event_agent_roles),
                 "eventID",
                 "event_fk",
             ),
-            material_agent_roles: role_table(
+            material_agent_roles: builder.role_table(
                 "material-agent-role",
                 normalize_rows(&request.material_agent_roles),
                 "materialEntityID",
                 "materialEntity_fk",
             ),
-            media_agent_roles: role_table(
+            media_agent_roles: builder.role_table(
                 "media-agent-role",
                 normalize_rows(&request.media_agent_roles),
                 "mediaID",
                 "media_fk",
             ),
-            occurrence_media: optional_table(
+            occurrence_media: builder.optional_table(
                 "occurrence-media",
                 "http://rs.tdwg.org/ac/terms/Media",
                 occurrence_media,
@@ -629,14 +810,14 @@ fn build_tables(request: &BundleRequest) -> Tables {
         .into_iter()
         .map(darwin_core_archive_media_row)
         .collect();
-    let occurrences = table(
+    let occurrences = builder.table(
         "occurrence",
         "http://rs.tdwg.org/dwc/terms/Occurrence",
         true,
         occurrence_rows.clone(),
         &["occurrenceID", "basisOfRecord"],
     );
-    let materials = optional_table(
+    let materials = builder.optional_table(
         "material",
         "http://rs.tdwg.org/dwc/terms/MaterialEntity",
         material_rows.clone(),
@@ -667,19 +848,19 @@ fn build_tables(request: &BundleRequest) -> Tables {
         &material_rows,
         &interaction_rows,
     ));
-    let measurements = optional_table(
+    let measurements = builder.optional_table(
         "measurement_or_fact",
         "http://rs.tdwg.org/dwc/terms/MeasurementOrFact",
         archive_measurements,
         &["occurrenceID"],
     );
-    let media = optional_table(
+    let media = builder.optional_table(
         "multimedia",
         "http://rs.gbif.org/terms/1.0/Multimedia",
         media_rows,
         &["occurrenceID"],
     );
-    let resource_relationships = optional_table(
+    let resource_relationships = builder.optional_table(
         "resource_relationship",
         "http://rs.gbif.org/terms/1.0/ResourceRelationship",
         interaction_rows
@@ -703,6 +884,7 @@ fn build_tables(request: &BundleRequest) -> Tables {
     );
     Tables {
         occurrences,
+        identifications: None,
         events: None,
         materials,
         measurements,
@@ -718,6 +900,106 @@ fn build_tables(request: &BundleRequest) -> Tables {
         media_agent_roles: None,
         occurrence_media: None,
     }
+}
+
+/// Moves the determination values a Data Package carries on its `identification` table.
+///
+/// Rank values leave the occurrence row; the accepted determination is repeated, because
+/// the Data Package `occurrence` class carries it as well.
+fn identification_row(
+    row: &mut BTreeMap<String, String>,
+    occurrence_id: &str,
+) -> Option<BTreeMap<String, String>> {
+    let mut identification = BTreeMap::new();
+    for field in IDENTIFICATION_ONLY_FIELDS {
+        if let Some(value) = row.remove(*field) {
+            identification.insert((*field).to_string(), value);
+        }
+    }
+    for field in IDENTIFICATION_SHARED_FIELDS {
+        if let Some(value) = row.get(*field) {
+            identification.insert((*field).to_string(), value.clone());
+        }
+    }
+    if identification.is_empty() || occurrence_id.is_empty() {
+        return None;
+    }
+    let identification_id = format!("{occurrence_id}:identification");
+    identification.insert("identificationID".to_string(), identification_id.clone());
+    identification.insert("identification_pk".to_string(), identification_id);
+    identification.insert("occurrence_fk".to_string(), occurrence_id.to_string());
+    Some(identification)
+}
+
+/// Moves the location values a Data Package carries on its `event` table.
+fn relocate_location(
+    row: &mut BTreeMap<String, String>,
+    locations: &mut BTreeMap<String, BTreeMap<String, String>>,
+) {
+    let event_id = row.get("eventID").cloned();
+    for field in EVENT_LOCATION_FIELDS {
+        let Some(value) = row.remove(*field) else {
+            continue;
+        };
+        let Some(event_id) = event_id.clone() else {
+            continue;
+        };
+        locations
+            .entry(event_id)
+            .or_default()
+            .entry((*field).to_string())
+            .or_insert(value);
+    }
+}
+
+/// Keeps occurrence values that the Data Package has no class column for as assertions.
+///
+/// Catalog and preparation values are dropped instead when a material row already carries
+/// them for the same occurrence.
+fn occurrence_assertions(
+    row: &mut BTreeMap<String, String>,
+    occurrence_id: &str,
+    has_material: bool,
+) -> Vec<BTreeMap<String, String>> {
+    let mut assertions = Vec::new();
+    if let Some(value) = row.remove("associatedTaxa") {
+        assertions.push(assertion_row(
+            "occurrenceID",
+            occurrence_id,
+            "associated taxa",
+            value,
+        ));
+    }
+    for (field, assertion_type) in OCCURRENCE_FIELDS_KEPT_AS_ASSERTIONS {
+        let Some(value) = row.remove(*field) else {
+            continue;
+        };
+        if has_material {
+            continue;
+        }
+        assertions.push(assertion_row(
+            "occurrenceID",
+            occurrence_id,
+            assertion_type,
+            value,
+        ));
+    }
+    assertions
+}
+
+fn assertion_row(
+    owner_key: &str,
+    owner_id: &str,
+    assertion_type: &str,
+    value: String,
+) -> BTreeMap<String, String> {
+    let slug = assertion_type.replace(' ', "-");
+    BTreeMap::from([
+        (owner_key.to_string(), owner_id.to_string()),
+        ("assertionID".to_string(), format!("{owner_id}:{slug}")),
+        ("assertionType".to_string(), assertion_type.to_string()),
+        ("assertionValue".to_string(), value),
+    ])
 }
 
 fn archive_assertions(
@@ -764,28 +1046,6 @@ fn archive_assertions(
             Some(row)
         })
         .collect()
-}
-
-fn role_table(
-    name: &'static str,
-    rows: Vec<BTreeMap<String, String>>,
-    target_source: &str,
-    target_key: &str,
-) -> Option<Table> {
-    let rows = rows
-        .into_iter()
-        .map(|mut row| {
-            rename_key(&mut row, target_source, target_key);
-            rename_key(&mut row, "agentID", "agent_fk");
-            row
-        })
-        .collect();
-    optional_table(
-        name,
-        "http://rs.tdwg.org/dwc/terms/AgentRole",
-        rows,
-        &[target_key, "agent_fk", "agentRole", "agentRoleOrder"],
-    )
 }
 
 fn copy_key(row: &mut BTreeMap<String, String>, source: &str, target: &str) {
@@ -939,41 +1199,133 @@ fn key_values(table: &Table, key: &str) -> BTreeSet<String> {
         .collect()
 }
 
-fn optional_table(
-    name: &'static str,
-    row_type: &'static str,
-    rows: Vec<BTreeMap<String, String>>,
-    required: &[&str],
-) -> Option<Table> {
-    (!rows.is_empty()).then(|| table(name, row_type, false, rows, required))
+/// Builds bundle tables, keeping only the columns the term registry recognizes.
+///
+/// A candidate header with no registered standard term for its table and profile is
+/// withheld rather than published under an invented term URI, and is reported to the user
+/// through the bundle manifest.
+struct TableBuilder {
+    profile: BundleProfile,
+    withheld: BTreeMap<&'static str, BTreeSet<String>>,
 }
 
-fn table(
-    name: &'static str,
-    row_type: &'static str,
-    core: bool,
-    rows: Vec<BTreeMap<String, String>>,
-    required: &[&str],
-) -> Table {
-    let mut headers = required
-        .iter()
-        .map(|value| (*value).to_string())
-        .collect::<Vec<_>>();
-    let mut optional = BTreeSet::new();
-    for row in &rows {
-        for (key, value) in row {
-            if !value.is_empty() && !required.contains(&key.as_str()) {
-                optional.insert(key.clone());
-            }
+impl TableBuilder {
+    pub fn new(format: &BundleFormat) -> Self {
+        Self {
+            profile: BundleProfile::from(format),
+            withheld: BTreeMap::new(),
         }
     }
-    headers.extend(optional);
-    Table {
-        name,
-        row_type,
-        core,
-        headers,
-        rows,
+
+    pub fn table(
+        &mut self,
+        name: &'static str,
+        row_type: &'static str,
+        core: bool,
+        rows: Vec<BTreeMap<String, String>>,
+        required: &[&str],
+    ) -> Table {
+        let columns = self.columns(name, &rows, required);
+        Table {
+            name,
+            row_type,
+            core,
+            columns,
+            rows,
+        }
+    }
+
+    pub fn optional_table(
+        &mut self,
+        name: &'static str,
+        row_type: &'static str,
+        rows: Vec<BTreeMap<String, String>>,
+        required: &[&str],
+    ) -> Option<Table> {
+        (!rows.is_empty()).then(|| self.table(name, row_type, false, rows, required))
+    }
+
+    pub fn role_table(
+        &mut self,
+        name: &'static str,
+        rows: Vec<BTreeMap<String, String>>,
+        target_source: &str,
+        target_key: &str,
+    ) -> Option<Table> {
+        let rows = rows
+            .into_iter()
+            .map(|mut row| {
+                rename_key(&mut row, target_source, target_key);
+                rename_key(&mut row, "agentID", "agent_fk");
+                row
+            })
+            .collect();
+        self.optional_table(
+            name,
+            "http://rs.tdwg.org/dwc/terms/AgentRole",
+            rows,
+            &[target_key, "agent_fk", "agentRole", "agentRoleOrder"],
+        )
+    }
+
+    /// One warning per table naming the values that were withheld from the bundle.
+    pub fn into_warnings(self) -> Vec<String> {
+        self.withheld
+            .into_iter()
+            .map(|(table, headers)| {
+                let names = headers.into_iter().collect::<Vec<_>>();
+                format!(
+                    "{table}: {} field(s) were not written because they have no registered \
+                     Darwin Core term ({}). Export a NAHPU Data Package to keep them.",
+                    names.len(),
+                    names.join(", ")
+                )
+            })
+            .collect()
+    }
+
+    fn columns(
+        &mut self,
+        name: &'static str,
+        rows: &[BTreeMap<String, String>],
+        required: &[&str],
+    ) -> Vec<Column> {
+        let mut candidates = required
+            .iter()
+            .map(|value| (*value).to_string())
+            .collect::<Vec<_>>();
+        let mut optional = BTreeSet::new();
+        for row in rows {
+            for (key, value) in row {
+                if !value.is_empty() && !required.contains(&key.as_str()) {
+                    optional.insert(key.clone());
+                }
+            }
+        }
+        candidates.extend(optional);
+        let mut columns = Vec::new();
+        for header in candidates {
+            match TermRegistry::column(name, &header, self.profile) {
+                Some(term) => columns.push(Column::new(term)),
+                None => {
+                    debug_assert!(
+                        !required.contains(&header.as_str()),
+                        "required column {name}.{header} is not registered"
+                    );
+                    self.withheld.entry(name).or_default().insert(header);
+                }
+            }
+        }
+        columns
+    }
+}
+
+impl From<&BundleFormat> for BundleProfile {
+    fn from(value: &BundleFormat) -> Self {
+        match value {
+            BundleFormat::DarwinCoreArchive => Self::Archive,
+            BundleFormat::DarwinCoreDataPackage => Self::DataPackage,
+        }
     }
 }
 
@@ -1005,13 +1357,13 @@ fn write_tables(output_dir: &Path, tables: &[Table]) -> Result<(), String> {
             .from_path(output_dir.join(format!("{}.csv", table.name)))
             .map_err(|error| error.to_string())?;
         writer
-            .write_record(&table.headers)
+            .write_record(table.headers())
             .map_err(|error| error.to_string())?;
         for row in &table.rows {
             let record = table
-                .headers
+                .columns
                 .iter()
-                .map(|header| row.get(header).map_or("", String::as_str));
+                .map(|column| row.get(&column.header).map_or("", String::as_str));
             writer
                 .write_record(record)
                 .map_err(|error| error.to_string())?;
@@ -1047,26 +1399,14 @@ fn meta_table(table: &Table, element: &str) -> String {
         xml.push_str("    <coreid index=\"0\"/>\n");
     }
     let first_field = usize::from(!table.core);
-    for (index, header) in table.headers.iter().enumerate().skip(first_field) {
+    for (index, column) in table.columns.iter().enumerate().skip(first_field) {
         xml.push_str(&format!(
             "    <field index=\"{index}\" term=\"{}\"/>\n",
-            term_uri(header)
+            column.term_uri
         ));
     }
     xml.push_str(&format!("  </{element}>\n"));
     xml
-}
-
-fn term_uri(header: &str) -> String {
-    if let Some(term) = header.strip_prefix("dcterms:") {
-        format!("{DCTERMS}{term}")
-    } else if let Some(term) = header.strip_prefix("ac:") {
-        format!("{AC_TERMS}{term}")
-    } else if header.starts_with("http://") || header.starts_with("https://") {
-        header.to_string()
-    } else {
-        format!("{DWC_TERMS}{header}")
-    }
 }
 
 fn data_package_json(request: &BundleRequest, tables: &[Table]) -> Value {
@@ -1074,9 +1414,9 @@ fn data_package_json(request: &BundleRequest, tables: &[Table]) -> Value {
         .iter()
         .map(|table| {
             let fields = table
-                .headers
+                .columns
                 .iter()
-                .map(|header| field_descriptor(table.name, header))
+                .map(|column| field_descriptor(table.name, column))
                 .collect::<Vec<_>>();
             let mut schema =
                 serde_json::Map::from_iter([("fields".to_string(), Value::Array(fields))]);
@@ -1119,6 +1459,7 @@ fn data_package_json(request: &BundleRequest, tables: &[Table]) -> Value {
 fn primary_key(table_name: &str) -> Option<&'static str> {
     match table_name {
         "event" => Some("event_pk"),
+        "identification" => Some("identification_pk"),
         "occurrence" => Some("occurrence_pk"),
         "material" => Some("materialEntity_pk"),
         "agent" => Some("agent_pk"),
@@ -1131,12 +1472,21 @@ fn primary_key(table_name: &str) -> Option<&'static str> {
 fn foreign_keys(table_name: &str) -> Vec<Value> {
     let relationships: &[(&str, &str, &str, &str)] = match table_name {
         "occurrence" => &[("event_fk", "happened during", "event", "event_pk")],
-        "material" => &[(
-            "collectionEvent_fk",
-            "collected during",
-            "event",
-            "event_pk",
-        )],
+        "identification" => &[("occurrence_fk", "about", "occurrence", "occurrence_pk")],
+        "material" => &[
+            (
+                "collectionEvent_fk",
+                "collected during",
+                "event",
+                "event_pk",
+            ),
+            (
+                "evidenceForOccurrence_fk",
+                "evidence for",
+                "occurrence",
+                "occurrence_pk",
+            ),
+        ],
         "occurrence-assertion" => &[("occurrence_fk", "about", "occurrence", "occurrence_pk")],
         "event-assertion" => &[("event_fk", "about", "event", "event_pk")],
         "material-assertion" => &[(
@@ -1208,59 +1558,19 @@ fn foreign_keys(table_name: &str) -> Vec<Value> {
         .collect()
 }
 
-fn field_descriptor(table_name: &str, field_name: &str) -> Value {
-    let title = field_title(field_name);
-    let (description, term, field_type) = descriptor_details(table_name, field_name);
+fn field_descriptor(table_name: &str, column: &Column) -> Value {
+    let field_type = if column.integer { "integer" } else { "string" };
     serde_json::json!({
-        "name": field_name,
-        "title": title,
-        "description": description,
+        "name": column.header,
+        "title": field_title(&column.header),
+        "description": format!(
+            "{} field in the {table_name} table.",
+            field_title(&column.header)
+        ),
         "type": field_type,
         "format": "default",
-        "dcterms:isVersionOf": term,
+        "dcterms:isVersionOf": column.term_uri,
     })
-}
-
-fn descriptor_details(table_name: &str, field_name: &str) -> (String, String, &'static str) {
-    let field_type = if field_name == "agentRoleOrder" {
-        "integer"
-    } else {
-        "string"
-    };
-    let term = match field_name {
-        "preferredAgentName" | "title" => format!("{DCTERMS}title"),
-        "mediaID" | "media_fk" => format!("{DCTERMS}identifier"),
-        "mediaType" => format!("{DCTERMS}type"),
-        "accessURI" => format!("{AC_TERMS}accessURI"),
-        "agent_pk" | "agent_fk" | "agentID" => format!("{DWC_TERMS}agentID"),
-        "event_pk" | "event_fk" => format!("{DWC_TERMS}eventID"),
-        "occurrence_pk" | "occurrence_fk" => format!("{DWC_TERMS}occurrenceID"),
-        "materialEntity_pk" | "materialEntity_fk" => {
-            format!("{DWC_TERMS}materialEntityID")
-        }
-        "organismInteraction_pk" | "organismInteraction_fk" => {
-            format!("{DWC_TERMS}organismInteractionID")
-        }
-        "subjectOccurrence_fk" | "relatedOccurrence_fk" => {
-            format!("{DWC_TERMS}occurrenceID")
-        }
-        "collectionEvent_fk" => format!("{DWC_TERMS}eventID"),
-        "agentRole" => format!("{DWC_TERMS}relationshipOfResource"),
-        "agentRoleOrder" => format!("{DWC_TERMS}agentRoleOrder"),
-        "assertionID" => format!("{DWC_TERMS}assertionID"),
-        "assertionType" => format!("{DWC_TERMS}assertionType"),
-        "assertionValue" => format!("{DWC_TERMS}assertionValue"),
-        "assertionUnit" => format!("{DWC_TERMS}assertionUnit"),
-        value => format!("{DWC_TERMS}{value}"),
-    };
-    (
-        format!(
-            "{} field in the {table_name} table.",
-            field_title(field_name)
-        ),
-        term,
-        field_type,
-    )
 }
 
 fn field_title(value: &str) -> String {
@@ -1430,7 +1740,10 @@ mod tests {
                     "scientificName".to_string(),
                     Value::String("Testus example".to_string()),
                 ),
-                ("empty".to_string(), Value::String(String::new())),
+                (
+                    "scientificNameAuthorship".to_string(),
+                    Value::String(String::new()),
+                ),
             ])],
             events: Vec::new(),
             materials: Vec::new(),
@@ -1451,6 +1764,127 @@ mod tests {
     }
 
     #[test]
+    fn unregistered_columns_are_withheld_and_reported() {
+        for format in [
+            BundleFormat::DarwinCoreArchive,
+            BundleFormat::DarwinCoreDataPackage,
+        ] {
+            let mut request = request(format);
+            request.occurrences[0].insert(
+                "dynamicProperties".to_string(),
+                Value::String("{\"x\":1}".to_string()),
+            );
+            request.occurrences[0]
+                .insert("notATerm".to_string(), Value::String("value".to_string()));
+            let manifest = build_manifest(&request).unwrap();
+            let occurrence = manifest
+                .files
+                .iter()
+                .find(|file| file.path == "occurrence.csv")
+                .unwrap();
+            assert!(
+                !occurrence
+                    .columns
+                    .contains(&"dynamicProperties".to_string())
+            );
+            assert!(!occurrence.columns.contains(&"notATerm".to_string()));
+            let warning = manifest
+                .warnings
+                .iter()
+                .find(|warning| warning.starts_with("occurrence:"))
+                .expect("withheld columns are reported");
+            assert!(warning.contains("dynamicProperties"));
+            assert!(warning.contains("notATerm"));
+            assert!(warning.contains("NAHPU Data Package"));
+        }
+    }
+
+    #[test]
+    fn archive_meta_advertises_only_registered_term_uris() {
+        let tables = build_tables(&request(BundleFormat::DarwinCoreArchive)).tables;
+        let meta = meta_xml(&tables.all());
+        let registered = tables
+            .all()
+            .into_iter()
+            .flat_map(|table| {
+                table
+                    .columns
+                    .into_iter()
+                    .map(|column| column.term_uri)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<BTreeSet<_>>();
+        for fragment in meta.split("term=\"").skip(1) {
+            let uri = fragment.split('"').next().unwrap();
+            assert!(registered.contains(uri), "{uri} is not a registered term");
+        }
+    }
+
+    #[test]
+    fn data_package_relocates_determination_and_location_values() {
+        let mut request = request(BundleFormat::DarwinCoreDataPackage);
+        let occurrence = &mut request.occurrences[0];
+        occurrence.insert("eventID".to_string(), Value::String("ev-1".to_string()));
+        occurrence.insert("genus".to_string(), Value::String("Testus".to_string()));
+        occurrence.insert(
+            "decimalLatitude".to_string(),
+            Value::String("1.5".to_string()),
+        );
+        occurrence.insert(
+            "associatedTaxa".to_string(),
+            Value::String("host: Rattus".to_string()),
+        );
+        request.events = vec![BTreeMap::from([
+            ("eventID".to_string(), Value::String("ev-1".to_string())),
+            (
+                "samplingProtocol".to_string(),
+                Value::String("mist net".to_string()),
+            ),
+        ])];
+        let tables = build_tables(&request).tables;
+
+        let occurrence = &tables.occurrences;
+        assert!(!occurrence.headers().contains(&"genus"));
+        assert!(!occurrence.headers().contains(&"decimalLatitude"));
+        assert!(!occurrence.headers().contains(&"basisOfRecord"));
+        assert!(occurrence.headers().contains(&"occurrence_pk"));
+
+        let identification = tables.identifications.expect("identification table");
+        assert!(identification.headers().contains(&"genus"));
+        assert_eq!(
+            identification.rows[0].get("occurrence_fk").unwrap(),
+            "occ-1"
+        );
+
+        let event = tables.events.expect("event table");
+        assert!(event.headers().contains(&"decimalLatitude"));
+        assert!(!event.headers().contains(&"samplingProtocol"));
+
+        let event_assertions = tables.event_assertions.expect("event assertions");
+        assert!(event_assertions.rows.iter().any(|row| {
+            row.get("assertionType").map(String::as_str) == Some("sampling protocol")
+        }));
+        let occurrence_assertions = tables.measurements.expect("occurrence assertions");
+        assert!(occurrence_assertions.rows.iter().any(|row| {
+            row.get("assertionType").map(String::as_str) == Some("associated taxa")
+        }));
+    }
+
+    #[test]
+    fn data_package_only_columns_never_reach_the_archive() {
+        let tables = build_tables(&request(BundleFormat::DarwinCoreArchive)).tables;
+        for table in tables.all() {
+            for header in table.headers() {
+                assert!(
+                    !header.ends_with("_pk") && !header.ends_with("_fk"),
+                    "{} carries the Data Package key {header}",
+                    table.name
+                );
+            }
+        }
+    }
+
+    #[test]
     fn plan_omits_empty_columns() {
         let manifest = build_manifest(&request(BundleFormat::DarwinCoreArchive)).unwrap();
         let occurrence = manifest
@@ -1458,7 +1892,11 @@ mod tests {
             .iter()
             .find(|file| file.path == "occurrence.csv")
             .unwrap();
-        assert!(!occurrence.columns.contains(&"empty".to_string()));
+        assert!(
+            !occurrence
+                .columns
+                .contains(&"scientificNameAuthorship".to_string())
+        );
     }
 
     #[test]
@@ -1503,7 +1941,7 @@ mod tests {
         let input = serde_json::to_string(&request).unwrap();
         assert_eq!(validate_bundle_json(&input).unwrap(), "[]");
 
-        let tables = build_tables(&request);
+        let tables = build_tables(&request).tables;
         let row = &tables.occurrences.rows[0];
         assert_eq!(row["occurrenceID"], "occ-1");
         assert_eq!(row["occurrence_pk"], "occ-1");
@@ -1512,7 +1950,7 @@ mod tests {
     #[test]
     fn data_package_uses_official_profile_and_complete_field_descriptors() {
         let request = request(BundleFormat::DarwinCoreDataPackage);
-        let tables = build_tables(&request);
+        let tables = build_tables(&request).tables;
         let descriptor = data_package_json(&request, &tables.all());
 
         assert_eq!(descriptor["profile"], DWC_DP_PROFILE);
@@ -1558,7 +1996,7 @@ mod tests {
 
     #[test]
     fn archive_meta_maps_core_identifier_as_a_field() {
-        let tables = build_tables(&request(BundleFormat::DarwinCoreArchive));
+        let tables = build_tables(&request(BundleFormat::DarwinCoreArchive)).tables;
         let meta = meta_xml(&tables.all());
         assert!(meta.contains("<id index=\"0\"/>"));
         assert!(

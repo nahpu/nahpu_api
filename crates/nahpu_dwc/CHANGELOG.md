@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0
+
+- Add `dwc::terms`, the registry of standard terms a Darwin Core bundle may
+  write. A column with no registered term is withheld and reported in the
+  bundle manifest instead of being published under an invented term IRI.
+- Restrict bundle columns to the `dwc`, `dcterms`, and `ac` namespaces. The
+  Darwin Core Data Package profile defines no terms of its own.
+- Realign the Data Package writer with the ratified class schemas. Taxonomic
+  ranks move to a new `identification` table, location and coordinate values
+  move to `event`, and values with no class column become assertions.
+- Add the `evidenceForOccurrence_fk` link from `material` to `occurrence`.
+- Replace the test-only term allow-list with registry-backed assertions.
+
 ## 0.5.0
 
 - Align the mapper and structured export contract with NAHPU schema v21 and

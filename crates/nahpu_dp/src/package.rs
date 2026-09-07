@@ -826,9 +826,13 @@ fn is_sqlite_path(package_path: &str) -> bool {
         })
 }
 
+/// Validates the SQLite enum mappings a package declares.
+///
+/// The list is scoped to the tables the package actually carries, so a project with no
+/// enum-bearing rows declares none. The mapping file is still written, with its header
+/// row only.
 fn validate_enum_mappings(request: &PackageRequest, errors: &mut Vec<String>) {
     if request.enum_mappings.is_empty() {
-        errors.push("SQLite enum mappings are required.".to_string());
         return;
     }
     let mut keys = BTreeSet::new();
@@ -1361,7 +1365,7 @@ mod tests {
         request.enum_mappings.clear();
         request.controlled_vocabularies.pop();
         let errors = validate_request(&request);
-        assert!(errors.contains(&"SQLite enum mappings are required.".to_string()));
+        assert!(!errors.contains(&"SQLite enum mappings are required.".to_string()));
         assert!(
             errors.contains(
                 &"Required controlled vocabulary is missing: specimenTreatment".to_string()
