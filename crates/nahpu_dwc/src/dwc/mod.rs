@@ -50,7 +50,7 @@ impl DwcMapper {
             "mammalAttribute" => Self::map_mammal_attribute_column(column_name),
             "birdAttribute" => Self::map_bird_attribute_column(column_name),
             "herpAttribute" => Self::map_herp_attribute_column(column_name),
-            "arthropodAttribute" => Self::map_arthropod_attribute_column(column_name),
+            "invertebrateAttribute" => Self::map_invertebrate_attribute_column(column_name),
             "fossilAttribute" => Self::map_fossil_attribute_column(column_name),
             "parasiteDetection" => Self::map_parasite_detection_column(column_name),
             "parasite" => Self::map_parasite_column(column_name),
@@ -196,11 +196,13 @@ impl DwcMapper {
             "birdAttribute::moltRemark" => ("molt remarks", None),
             "herpAttribute::weight" => ("weight", Some("g")),
             "herpAttribute::svl" => ("snout-vent length", Some("cm")),
-            "arthropodAttribute::headWidth" => ("head width", Some("mm")),
-            "arthropodAttribute::bodyLength" => ("body length", Some("mm")),
-            "arthropodAttribute::wingspanUpper" => ("upper wingspan", Some("mm")),
-            "arthropodAttribute::wingspanLower" => ("lower wingspan", Some("mm")),
-            "arthropodAttribute::hostPart" => ("host part", None),
+            "invertebrateAttribute::headWidth" => ("head width", Some("mm")),
+            "invertebrateAttribute::bodyLength" => ("body length", Some("mm")),
+            "invertebrateAttribute::wingspanUpper" => ("upper wingspan", Some("mm")),
+            "invertebrateAttribute::wingspanLower" => ("lower wingspan", Some("mm")),
+            "invertebrateAttribute::hostPart" => ("host part", None),
+            // Pre-v19 columns, kept under the table's pre-v22 name because
+            // that is how existing sources spell them.
             "arthropodAttribute::canopyAffinity" => ("canopy affinity", None),
             "arthropodAttribute::canopyCover" => ("canopy cover", None),
             "siteAttribute::canopyCover" => ("canopy cover", None),
@@ -552,7 +554,7 @@ impl DwcMapper {
         }
     }
 
-    fn map_arthropod_attribute_column(column_name: &str) -> Option<&'static str> {
+    fn map_invertebrate_attribute_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "specimenUuid" => Some("dwc:occurrenceID"),
             "sex" => Some("dwc:sex"),
@@ -716,8 +718,8 @@ mod tests {
             "birdAttribute::lifeStage",
             "birdAttribute::specimenRemark",
             "herpAttribute::lifeStage",
-            "arthropodAttribute::lifeStage",
-            "arthropodAttribute::caste",
+            "invertebrateAttribute::lifeStage",
+            "invertebrateAttribute::caste",
             "fossilAttribute::ontogeneticStage",
         ];
 
@@ -778,7 +780,7 @@ mod tests {
             ("specimen::determiner", "dwc:identifiedBy"),
             ("specimen::determinerID", "dwc:identifiedByID"),
             ("herpAttribute::specimenUuid", "dwc:occurrenceID"),
-            ("arthropodAttribute::hostOrganism", "dwc:associatedTaxa"),
+            ("invertebrateAttribute::hostOrganism", "dwc:associatedTaxa"),
             (
                 "fossilAttribute::specimenDescription",
                 "dwc:materialEntityRemarks",
@@ -801,8 +803,8 @@ mod tests {
             ("mammalAttribute::lifeStage", "dwc:lifeStage"),
             ("birdAttribute::lifeStage", "dwc:lifeStage"),
             ("herpAttribute::lifeStage", "dwc:lifeStage"),
-            ("arthropodAttribute::lifeStage", "dwc:lifeStage"),
-            ("arthropodAttribute::caste", "dwc:caste"),
+            ("invertebrateAttribute::lifeStage", "dwc:lifeStage"),
+            ("invertebrateAttribute::caste", "dwc:caste"),
             ("fossilAttribute::ontogeneticStage", "dwc:lifeStage"),
         ] {
             assert_eq!(
@@ -909,9 +911,9 @@ mod tests {
     }
 
     #[test]
-    fn arthropod_measurements_declare_units() {
+    fn invertebrate_measurements_declare_units() {
         for (source_key, measurement_type, unit) in [
-            ("arthropodAttribute::headWidth", "head width", "mm"),
+            ("invertebrateAttribute::headWidth", "head width", "mm"),
             (
                 "arthropodAttribute::ambientTemperature",
                 "ambient temperature",
@@ -925,7 +927,7 @@ mod tests {
             ("arthropodAttribute::flowVelocity", "flow velocity", "m/s"),
         ] {
             let mapping = DwcMapper::get_dwc_mapping_for_source_key(source_key)
-                .expect("arthropod measurement should be mapped");
+                .expect("invertebrate measurement should be mapped");
             assert_eq!(mapping.measurement_type, Some(measurement_type));
             assert_eq!(mapping.measurement_unit, Some(unit));
         }

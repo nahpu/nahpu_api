@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- Align the mapper with NAHPU schema v22. `arthropodAttribute` is now
+  `invertebrateAttribute`, and its live columns are mapped under the new
+  namespace.
+- Keep the pre-v19 `arthropodAttribute::` measurement keys as legacy sources,
+  alongside the `weather::` keys they parallel. Those columns were removed
+  before the table was renamed, so existing sources still spell them that way.
+
 ## 0.6.0
 
 - Add `dwc::terms`, the registry of standard terms a Darwin Core bundle may
