@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Align the mapper with NAHPU schema v23. Map ichthyology `fishAttribute` lot
+  and individual measurements, `specimenIndividual` lot individuals, the
+  `specimenPartIndividual` and `parasiteIndividual` links, and the
+  `environment::conductivity` and `environment::dissolvedOxygenPercent` event
+  measurements. Classify every new column in the schema audit.
+
 ## 0.7.0
 
 - Align the mapper with NAHPU schema v22. `arthropodAttribute` is now

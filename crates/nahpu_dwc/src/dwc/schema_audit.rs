@@ -22,6 +22,8 @@ const RELATIONSHIP_FIELDS: &[&str] = &[
     "parasite::associationStatus",
     "parasite::category",
     "parasite::specimenUuid",
+    "parasiteIndividual::individualID",
+    "parasiteIndividual::parasiteID",
     "personnelList::personnelUuid",
     "personnelList::projectUuid",
     "siteAssociatedData::associatedDataId",
@@ -31,8 +33,11 @@ const RELATIONSHIP_FIELDS: &[&str] = &[
     "siteMedia::siteId",
     "specimenAssociatedData::associatedDataId",
     "specimenAssociatedData::specimenUuid",
+    "specimenIndividual::id",
     "specimenPart::personnelId",
     "specimenPart::specimenUuid",
+    "specimenPartIndividual::individualID",
+    "specimenPartIndividual::partID",
     "specimenMedia::mediaId",
     "specimenMedia::specimenUuid",
     "specimen::catalogerID",
@@ -41,12 +46,17 @@ const RELATIONSHIP_FIELDS: &[&str] = &[
 
 const COMPOSITE_SUPPORT_FIELDS: &[&str] = &[
     "birdAttribute::weightUnit",
+    "fishAttribute::specimenType",
+    "fishAttribute::weightUnit",
     "fossilAttribute::weightUnit",
     "herpAttribute::weightUnit",
     "mammalAttribute::weightUnit",
     "specimen::condition",
     "specimen::coordinateExtentMeters",
     "specimen::projectFieldNumber",
+    "specimenIndividual::lifeStage",
+    "specimenIndividual::sex",
+    "specimenIndividual::weightUnit",
 ];
 
 const UNMAPPED_FIELDS: &[&str] = &[
@@ -58,6 +68,7 @@ const UNMAPPED_FIELDS: &[&str] = &[
     "collPersonnel::id",
     "coordinate::gpsUnit",
     "coordinate::id",
+    "fishAttribute::isAutoRange",
     "fossilSite::biozone",
     "fossilSite::depositionalContinent",
     "fossilSite::depositionalEnvironmentType",
@@ -140,7 +151,7 @@ enum MappingStatus {
 }
 
 #[test]
-fn every_schema_v22_field_has_an_explicit_darwin_core_status() {
+fn every_schema_v23_field_has_an_explicit_darwin_core_status() {
     let schema_fields = schema_fields();
     let mut unclassified = Vec::new();
 
@@ -196,7 +207,7 @@ fn status_for(source: &str) -> Option<MappingStatus> {
 fn schema_fields() -> BTreeSet<String> {
     let dialect = GenericDialect {};
     let statements = Parser::parse_sql(&dialect, &create_table_statements(SCHEMA))
-        .expect("schema v22 should parse as SQL");
+        .expect("schema v23 should parse as SQL");
     let mut fields = BTreeSet::new();
 
     for statement in statements {

@@ -52,6 +52,8 @@ impl DwcMapper {
             "herpAttribute" => Self::map_herp_attribute_column(column_name),
             "invertebrateAttribute" => Self::map_invertebrate_attribute_column(column_name),
             "fossilAttribute" => Self::map_fossil_attribute_column(column_name),
+            "fishAttribute" => Self::map_fish_attribute_column(column_name),
+            "specimenIndividual" => Self::map_specimen_individual_column(column_name),
             "parasiteDetection" => Self::map_parasite_detection_column(column_name),
             "parasite" => Self::map_parasite_column(column_name),
             "eventMedia" => Self::map_event_media_column(column_name),
@@ -207,6 +209,19 @@ impl DwcMapper {
             "arthropodAttribute::canopyCover" => ("canopy cover", None),
             "siteAttribute::canopyCover" => ("canopy cover", None),
             "fossilAttribute::weight" => ("weight", Some("g")),
+            "fishAttribute::standardLength" | "specimenIndividual::standardLength" => {
+                ("standard length", Some("mm"))
+            }
+            "fishAttribute::totalLength" | "specimenIndividual::totalLength" => {
+                ("total length", Some("mm"))
+            }
+            "fishAttribute::weight" | "specimenIndividual::weight" => ("weight", Some("g")),
+            "fishAttribute::minStandardLength" => ("minimum standard length", Some("mm")),
+            "fishAttribute::maxStandardLength" => ("maximum standard length", Some("mm")),
+            "fishAttribute::minTotalLength" => ("minimum total length", Some("mm")),
+            "fishAttribute::maxTotalLength" => ("maximum total length", Some("mm")),
+            "fishAttribute::minWeight" => ("minimum weight", Some("g")),
+            "fishAttribute::maxWeight" => ("maximum weight", Some("g")),
             "parasiteDetection::parasiteExamined" => ("parasites examined", None),
             "parasiteDetection::parasiteDetected" => ("parasites detected", None),
             "environment::lowestDayTempC" | "weather::lowestDayTempC" => {
@@ -248,6 +263,8 @@ impl DwcMapper {
             "environment::flowVelocity"
             | "weather::flowVelocity"
             | "arthropodAttribute::flowVelocity" => ("flow velocity", Some("m/s")),
+            "environment::conductivity" => ("conductivity", Some("µS/cm")),
+            "environment::dissolvedOxygenPercent" => ("dissolved oxygen saturation", Some("%")),
             _ => return None,
         };
         Some(DwcMapping {
@@ -263,6 +280,10 @@ impl DwcMapper {
                 "birdAttribute::weight" => Some("birdAttribute::weightUnit"),
                 "herpAttribute::weight" => Some("herpAttribute::weightUnit"),
                 "fossilAttribute::weight" => Some("fossilAttribute::weightUnit"),
+                "fishAttribute::weight"
+                | "fishAttribute::minWeight"
+                | "fishAttribute::maxWeight" => Some("fishAttribute::weightUnit"),
+                "specimenIndividual::weight" => Some("specimenIndividual::weightUnit"),
                 _ => None,
             },
         })
@@ -578,6 +599,28 @@ impl DwcMapper {
         }
     }
 
+    /// Maps fish individual and lot records added in NAHPU schema v23.
+    fn map_fish_attribute_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "specimenUuid" => Some("dwc:occurrenceID"),
+            "sex" => Some("dwc:sex"),
+            "lifeStage" => Some("dwc:lifeStage"),
+            "individualCount" => Some("dwc:individualCount"),
+            "remark" => Some("dwc:occurrenceRemarks"),
+            _ => None,
+        }
+    }
+
+    /// Maps lot individuals, exported as whole-organism material entities.
+    fn map_specimen_individual_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "specimenUuid" => Some("dwc:occurrenceID"),
+            "individualID" => Some("dwc:otherCatalogNumbers"),
+            "remark" => Some("dwc:materialEntityRemarks"),
+            _ => None,
+        }
+    }
+
     fn map_parasite_detection_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "specimenUuid" => Some("dwc:occurrenceID"),
@@ -806,6 +849,14 @@ mod tests {
             ("invertebrateAttribute::lifeStage", "dwc:lifeStage"),
             ("invertebrateAttribute::caste", "dwc:caste"),
             ("fossilAttribute::ontogeneticStage", "dwc:lifeStage"),
+            ("fishAttribute::specimenUuid", "dwc:occurrenceID"),
+            ("fishAttribute::lifeStage", "dwc:lifeStage"),
+            ("fishAttribute::individualCount", "dwc:individualCount"),
+            (
+                "specimenIndividual::individualID",
+                "dwc:otherCatalogNumbers",
+            ),
+            ("specimenIndividual::remark", "dwc:materialEntityRemarks"),
         ] {
             assert_eq!(
                 DwcMapper::get_dwc_term_for_source_key(source_key),
@@ -1033,6 +1084,13 @@ mod tests {
             ("birdAttribute::weight", "birdAttribute::weightUnit"),
             ("herpAttribute::weight", "herpAttribute::weightUnit"),
             ("fossilAttribute::weight", "fossilAttribute::weightUnit"),
+            ("fishAttribute::weight", "fishAttribute::weightUnit"),
+            ("fishAttribute::minWeight", "fishAttribute::weightUnit"),
+            ("fishAttribute::maxWeight", "fishAttribute::weightUnit"),
+            (
+                "specimenIndividual::weight",
+                "specimenIndividual::weightUnit",
+            ),
         ] {
             let mapping =
                 DwcMapper::get_dwc_mapping_for_source_key(source).expect("weight should be mapped");
