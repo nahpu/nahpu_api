@@ -178,6 +178,12 @@ fn create_rust_code(drift_content: &str) -> String {
                     rust_code.push_str("    #[serde(rename = \"type\")]\n");
                     rust_code.push_str(&format!("    pub type_: {},\n", rust_type));
                 } else {
+                    // Names with consecutive capitals, such as `speciesID`, do not survive the
+                    // snake_case and camelCase round trip (`speciesId`). JSON keys must match
+                    // the Drift column names, so those fields get an explicit rename.
+                    if serde_camel_case(&field_name_snake) != col_name {
+                        rust_code.push_str(&format!("    #[serde(rename = \"{}\")]\n", col_name));
+                    }
                     rust_code.push_str(&format!("    pub {}: {},\n", field_name_snake, rust_type));
                 }
             }
@@ -186,6 +192,23 @@ fn create_rust_code(drift_content: &str) -> String {
         }
     }
     rust_code
+}
+
+/// Converts a snake_case field name the way `#[serde(rename_all = "camelCase")]` does.
+fn serde_camel_case(snake: &str) -> String {
+    let mut camel = String::with_capacity(snake.len());
+    let mut capitalize_next = false;
+    for ch in snake.chars() {
+        if ch == '_' {
+            capitalize_next = !camel.is_empty();
+        } else if capitalize_next {
+            camel.extend(ch.to_uppercase());
+            capitalize_next = false;
+        } else {
+            camel.push(ch);
+        }
+    }
+    camel
 }
 
 /// Main entry point for the build script.

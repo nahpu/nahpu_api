@@ -39,4 +39,28 @@ mod tests {
         assert!(geography_json.contains("Yosemite"));
         assert!(geography_json.contains("\"matchKey\""));
     }
+
+    #[test]
+    fn test_id_columns_round_trip_with_drift_names() {
+        let specimen: Specimen = serde_json::from_str(
+            r#"{"uuid": "s1", "speciesID": 3, "museumID": "MVZ 1", "collEventID": 7}"#,
+        )
+        .expect("specimen JSON with Drift column names should deserialize");
+        assert_eq!(specimen.species_id, Some(3));
+        assert_eq!(specimen.museum_id.as_deref(), Some("MVZ 1"));
+        assert_eq!(specimen.coll_event_id, Some(7));
+        let json = serde_json::to_string(&specimen).expect("specimen should serialize");
+        assert!(json.contains("\"speciesID\":3"));
+        assert!(json.contains("\"museumID\":\"MVZ 1\""));
+
+        let site: Site = serde_json::from_str(r#"{"id": 1, "siteID": "Site-01"}"#)
+            .expect("site JSON with Drift column names should deserialize");
+        assert_eq!(site.site_id.as_deref(), Some("Site-01"));
+        // Columns that already round-trip keep their camelCase names.
+        assert!(
+            serde_json::to_string(&site)
+                .expect("site should serialize")
+                .contains("\"projectUuid\"")
+        );
+    }
 }

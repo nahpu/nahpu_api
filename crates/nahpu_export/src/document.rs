@@ -448,7 +448,8 @@ mod tests {
     fn renders_site_geography_in_markdown_and_typst() {
         let renderer = DocumentRenderer::from_json(
             r#"{
-                "sites": [{"id": 1, "siteId": "Site-01", "geographyId": 10}],
+                "narrative": [{"id": 1, "siteID": 1, "narrative": "Set traps."}],
+                "sites": [{"id": 1, "siteID": "Site-01", "geographyId": 10}],
                 "geographies": [{
                     "id": 10,
                     "country": "United * States",
@@ -461,6 +462,9 @@ mod tests {
 
         let markdown = renderer.render_markdown();
         let typst = renderer.render_typst();
+        // Narratives link to sites through the Drift column `siteID`.
+        assert!(markdown.contains("**Site ID**: 1"));
+        assert!(typst.contains("*Site ID*: 1"));
         assert!(markdown.contains("**Locality**: Yosemite \\#1"));
         assert!(markdown.contains("**Country**: United \\* States"));
         assert!(typst.contains("*Locality*: Yosemite \\#1"));
