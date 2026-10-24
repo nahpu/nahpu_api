@@ -14,6 +14,7 @@ This workspace consists of several modular crates:
 - **`nahpu_export`**: Renders database records into formatted documents such as Markdown, Typst, and PDF.
 - **`nahpu_gis`**: Handles GIS data processing and conversion.
 - **`nahpu_configs`**: Manages reproducibility-related user configuration, export presets, template presets, and document layouts in `redb`.
+- **`nahpu_dl`**: Deep learning inference, embeddings, evaluation, and fine-tuning built on Burn. Used by the [milu](https://github.com/hhandika/milu) command line tool.
 
 ## Development Status
 

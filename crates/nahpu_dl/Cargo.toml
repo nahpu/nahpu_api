@@ -1,0 +1,33 @@
+[package]
+name = "nahpu_dl"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+authors = ["Heru Handika <herubiolog@gmail.com>"]
+description = "Deep learning inference, embeddings, evaluation, and fine-tuning for NAHPU."
+repository = "https://github.com/hhandika/nahpu_api"
+license = "MIT"
+keywords = ["nahpu", "deep-learning", "burn", "embeddings", "biodiversity"]
+categories = ["science"]
+readme = "README.md"
+homepage = "https://www.nahpu.app/"
+
+[features]
+default = ["flex"]
+# Pure-Rust CPU backend. Keeps app and CLI builds self-contained.
+flex = ["burn/flex"]
+# GPU backend through Vulkan, Metal, or DX12.
+wgpu = ["burn/wgpu"]
+cuda = ["burn/cuda"]
+# Fine-tuning support. Off by default so inference-only builds carry no autodiff or optimizers.
+train = ["burn/autodiff", "burn/optim"]
+
+[dependencies]
+burn = { version = "0.22.1", default-features = false, features = ["std", "store"] }
+csv = "1.4"
+serde = { version = "1.0.228", features = ["derive"] }
+thiserror = "2.0"
+toml = "1.1"
+
+[dev-dependencies]
+tempfile = "3.27.0"
