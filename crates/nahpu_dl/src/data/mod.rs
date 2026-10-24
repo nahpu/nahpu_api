@@ -8,9 +8,15 @@ use serde::{Deserialize, Serialize};
 use crate::manifest::{Modality, ModelManifest, TabularPreprocessing};
 use crate::{DlError, Result};
 
+mod image;
+mod image_folder;
+mod nahpu;
 pub(crate) mod split;
 mod tabular;
 
+pub use image::{IMAGE_EXTENSIONS, is_image_path};
+pub use image_folder::ImageFolder;
+pub use nahpu::{NahpuPackage, PROJECT_FILE_NAME, TaxonRank};
 pub use split::DataSplit;
 pub use tabular::TabularCsv;
 
@@ -161,13 +167,18 @@ impl LabeledDataset {
 pub enum BatchInput {
     /// Standardized features: `[batch, features]`.
     Tabular(Tensor<2>),
+    /// Normalized images: `[batch, 3, height, width]`.
+    Image(Tensor<4>),
 }
 
 /// Converts raw samples into a tensor batch using the manifest's preprocessing.
+///
+/// `augment_seed` turns on random training augmentation for image models.
 pub(crate) fn encode_batch(
     manifest: &ModelManifest,
     samples: &[Sample],
     device: &Device,
+    augment_seed: Option<u64>,
 ) -> Result<BatchInput> {
     if let Some(sample) = samples
         .iter()
@@ -182,10 +193,10 @@ pub(crate) fn encode_batch(
     }
     match manifest.modality {
         Modality::Tabular => encode_tabular(manifest, samples, device),
-        Modality::Image | Modality::Text => Err(DlError::Unsupported(format!(
-            "{:?} models are not supported yet",
-            manifest.modality
-        ))),
+        Modality::Image => encode_images(manifest, samples, device, augment_seed),
+        Modality::Text => Err(DlError::Unsupported(
+            "text models are not supported yet".to_string(),
+        )),
     }
 }
 
@@ -207,6 +218,22 @@ fn encode_tabular(
     }
     let data = TensorData::new(values, [samples.len(), n_features]);
     Ok(BatchInput::Tabular(Tensor::from_data(data, device)))
+}
+
+fn encode_images(
+    manifest: &ModelManifest,
+    samples: &[Sample],
+    device: &Device,
+    augment_seed: Option<u64>,
+) -> Result<BatchInput> {
+    let preprocessing =
+        manifest.preprocessing.image.as_ref().ok_or_else(|| {
+            DlError::Config("the manifest has no image preprocessing".to_string())
+        })?;
+    let pixels = image::encode_pixels(samples, preprocessing, augment_seed)?;
+    let size = preprocessing.size as usize;
+    let data = TensorData::new(pixels, [samples.len(), 3, size, size]);
+    Ok(BatchInput::Image(Tensor::from_data(data, device)))
 }
 
 fn column_stats(values: impl Iterator<Item = f32>) -> (f32, f32) {

@@ -99,6 +99,11 @@ impl SplitMix64 {
         z ^ (z >> 31)
     }
 
+    /// Uniform value in [0, 1).
+    pub(crate) fn next_f64(&mut self) -> f64 {
+        (self.next_u64() >> 11) as f64 / (1u64 << 53) as f64
+    }
+
     /// Fisher-Yates shuffle.
     pub(crate) fn shuffle<T>(&mut self, items: &mut [T]) {
         for i in (1..items.len()).rev() {

@@ -20,14 +20,29 @@ my_model/
 The manifest records the architecture, labels, and preprocessing, so a package can be loaded
 without extra configuration.
 
+## Models
+
+- Tabular: multilayer perceptron.
+- Images: ResNet-18/34/50/101/152 and MobileNetV2. ImageNet-pretrained weights load from
+  torchvision or timm checkpoints (`PretrainedImport`), or download from the Hugging Face Hub
+  (`PretrainedModel::pull`, `hub` feature).
+
+## Data
+
+- CSV or TSV tables (`TabularCsv`).
+- Image folders with one sub-directory per class (`ImageFolder`).
+- Extracted NAHPU data packages (`NahpuPackage`): specimen photos labeled by taxon at a chosen
+  rank.
+
 ## Features
 
-- `flex` (default): pure-Rust CPU backend.
+- `flex` (default): pure-Rust CPU backend, multithreaded.
 - `wgpu`: GPU backend through Vulkan, Metal, or DX12.
 - `cuda`: CUDA backend.
 - `train`: fine-tuning. Off by default so inference-only builds stay small.
+- `hub`: download pretrained models from the Hugging Face Hub.
 
 ## Status
 
-Experimental. Tabular models are supported end to end. Image models, text models, and ONNX
+Experimental. Tabular and image models are supported end to end. Text models and ONNX
 import and export are planned.

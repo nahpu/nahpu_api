@@ -27,9 +27,12 @@ mod error;
 mod evaluate;
 #[cfg(feature = "train")]
 mod finetune;
+#[cfg(feature = "hub")]
+mod hub;
 mod manifest;
 pub mod models;
 mod predict;
+mod pretrained;
 mod progress;
 mod store;
 
@@ -40,14 +43,18 @@ pub use error::DlError;
 pub use evaluate::{ClassMetrics, ClassificationMetrics, EvalReport, Evaluator, RegressionMetrics};
 #[cfg(feature = "train")]
 pub use finetune::{EpochStats, FineTuneConfig, FineTuneOutcome, FineTuneStrategy, FineTuner};
+#[cfg(feature = "hub")]
+pub use hub::{PRETRAINED_MODELS, PretrainedModel, download};
 pub use manifest::{
-    Architecture, MANIFEST_FILE_NAME, Modality, ModelManifest, Preprocessing, Provenance,
-    TabularPreprocessing, TargetScaling, Task, WeightFormat, WeightsInfo,
+    Architecture, DEFAULT_IMAGE_SIZE, ImagePreprocessing, MANIFEST_FILE_NAME, Modality,
+    ModelManifest, Preprocessing, Provenance, TabularPreprocessing, TargetScaling, Task,
+    WeightFormat, WeightsInfo,
 };
 pub use models::DlModel;
 pub use predict::{
     ClassScore, DEFAULT_BATCH_SIZE, DEFAULT_TOP_K, Prediction, PredictionOutput, Predictor,
 };
+pub use pretrained::{IMAGENET_CLASSES, PretrainedImport};
 pub use progress::{NoProgress, ProgressReporter};
 
 /// Version of the compiled `nahpu_dl` crate.

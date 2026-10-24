@@ -104,6 +104,9 @@ impl ModelManifest {
         if self.modality == Modality::Tabular && self.preprocessing.tabular.is_none() {
             return Err("tabular models need a [preprocessing.tabular] section".to_string());
         }
+        if self.modality == Modality::Image && self.preprocessing.image.is_none() {
+            return Err("image models need a [preprocessing.image] section".to_string());
+        }
         Ok(())
     }
 }
@@ -147,6 +150,15 @@ pub enum Architecture {
         /// Dropout probability applied after each hidden layer during training.
         dropout: f64,
     },
+    /// Residual network (He et al. 2016) for images: 18, 34, 50, 101, or 152 layers.
+    #[serde(rename = "resnet")]
+    ResNet {
+        /// Number of layers.
+        depth: usize,
+    },
+    /// MobileNetV2 (Sandler et al. 2018) for images, small enough for phones.
+    #[serde(rename = "mobilenet_v2")]
+    MobileNetV2,
 }
 
 impl Architecture {
@@ -156,6 +168,9 @@ impl Architecture {
             Self::Mlp {
                 input_dim, hidden, ..
             } => hidden.last().copied().unwrap_or(*input_dim),
+            Self::ResNet { depth } if *depth >= 50 => 2048,
+            Self::ResNet { .. } => 512,
+            Self::MobileNetV2 => 1280,
         }
     }
 
@@ -163,6 +178,7 @@ impl Architecture {
     pub fn modality(&self) -> Modality {
         match self {
             Self::Mlp { .. } => Modality::Tabular,
+            Self::ResNet { .. } | Self::MobileNetV2 => Modality::Image,
         }
     }
 }
@@ -173,9 +189,49 @@ pub struct Preprocessing {
     /// Feature order and standardization for tabular models.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tabular: Option<TabularPreprocessing>,
+    /// Resizing and normalization for image models.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<ImagePreprocessing>,
     /// Scaling of regression targets. Predictions are mapped back to the original units.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<TargetScaling>,
+}
+
+/// Default image side length, in pixels, for ImageNet-pretrained models.
+pub const DEFAULT_IMAGE_SIZE: u32 = 224;
+
+/// How images are turned into model input.
+///
+/// Evaluation resizes the shorter side to `size / crop_fraction`, takes a centered
+/// `size` x `size` crop, and normalizes each channel. This is the usual ImageNet recipe.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct ImagePreprocessing {
+    /// Side length of the square model input, in pixels.
+    pub size: u32,
+    /// Fraction of the resized image kept by the center crop.
+    pub crop_fraction: f32,
+    /// Per-channel (RGB) mean of pixel values scaled to [0, 1].
+    pub mean: [f32; 3],
+    /// Per-channel (RGB) standard deviation of pixel values scaled to [0, 1].
+    pub std: [f32; 3],
+}
+
+impl Default for ImagePreprocessing {
+    fn default() -> Self {
+        Self {
+            size: DEFAULT_IMAGE_SIZE,
+            crop_fraction: 0.875,
+            mean: [0.485, 0.456, 0.406],
+            std: [0.229, 0.224, 0.225],
+        }
+    }
+}
+
+impl ImagePreprocessing {
+    /// Same normalization with a different input size.
+    pub fn with_size(self, size: u32) -> Self {
+        Self { size, ..self }
+    }
 }
 
 /// Standardization of a regression target.
@@ -355,6 +411,7 @@ mod tests {
                     means: vec![1.0, 2.0],
                     stds: vec![0.5, 0.0],
                 }),
+                image: None,
                 target: None,
             },
             weights: WeightsInfo::for_format(WeightFormat::Burnpack),
@@ -394,6 +451,25 @@ mod tests {
         let row = tabular.standardize(&[1.0, 5.0]).unwrap();
         assert_eq!(row, vec![0.0, 3.0]);
         assert!(tabular.standardize(&[1.0]).is_err());
+    }
+
+    #[test]
+    fn test_image_manifest_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut manifest = sample_manifest();
+        manifest.modality = Modality::Image;
+        manifest.architecture = Architecture::ResNet { depth: 50 };
+        manifest.embedding_dim = manifest.architecture.embedding_dim();
+        manifest.preprocessing = Preprocessing {
+            image: Some(ImagePreprocessing::default().with_size(128)),
+            ..Default::default()
+        };
+        manifest.write_to_dir(dir.path()).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(MANIFEST_FILE_NAME)).unwrap();
+        assert!(text.contains("type = \"resnet\""));
+        let read = ModelManifest::from_dir(dir.path()).unwrap();
+        assert_eq!(read, manifest);
+        assert_eq!(read.embedding_dim, 2048);
     }
 
     #[test]

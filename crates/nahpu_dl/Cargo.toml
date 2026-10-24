@@ -15,18 +15,24 @@ homepage = "https://www.nahpu.app/"
 [features]
 default = ["flex"]
 # Pure-Rust CPU backend. Keeps app and CLI builds self-contained.
-flex = ["burn/flex"]
+flex = ["burn/flex", "burn/rayon", "burn/simd"]
 # GPU backend through Vulkan, Metal, or DX12.
 wgpu = ["burn/wgpu"]
 cuda = ["burn/cuda"]
 # Fine-tuning support. Off by default so inference-only builds carry no autodiff or optimizers.
 train = ["burn/autodiff", "burn/optim"]
+# Download pretrained weights from the Hugging Face Hub.
+hub = ["dep:ureq"]
 
 [dependencies]
-burn = { version = "0.22.1", default-features = false, features = ["std", "store"] }
+burn = { version = "0.22.1", default-features = false, features = ["std", "store", "pytorch"] }
 csv = "1.4"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+rayon = "1.12"
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
 thiserror = "2.0"
+ureq = { version = "3.5", optional = true }
 toml = "1.1"
 
 [dev-dependencies]

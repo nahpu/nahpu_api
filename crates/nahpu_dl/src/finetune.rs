@@ -10,7 +10,8 @@ use crate::data::split::SplitMix64;
 use crate::data::{self, DataSplit, LabeledDataset, Target};
 use crate::evaluate::{EvalReport, Evaluator};
 use crate::manifest::{
-    Architecture, ModelManifest, Preprocessing, Provenance, TargetScaling, Task, WeightsInfo,
+    Architecture, DEFAULT_IMAGE_SIZE, ImagePreprocessing, Modality, ModelManifest, Preprocessing,
+    Provenance, TargetScaling, Task, WeightsInfo,
 };
 use crate::models::{DlModel, Head, Network};
 use crate::predict::Predictor;
@@ -43,6 +44,12 @@ pub struct FineTuneConfig {
     pub architecture: Option<Architecture>,
     /// Model package to start from.
     pub base_model: Option<PathBuf>,
+    /// Input side length for image models. Defaults to 224 for new models and to the base
+    /// model's size when fine-tuning.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_size: Option<u32>,
+    /// Randomly crop, flip, and color-jitter training images.
+    pub augment: bool,
     /// Which layers are trained.
     pub strategy: FineTuneStrategy,
     /// Maximum number of passes over the training data.
@@ -70,6 +77,8 @@ impl Default for FineTuneConfig {
             task: Task::Classification,
             architecture: None,
             base_model: None,
+            image_size: None,
+            augment: true,
             strategy: FineTuneStrategy::Full,
             epochs: 50,
             batch_size: 32,
@@ -230,18 +239,36 @@ impl<'a> FineTuner<'a> {
             self.config.architecture.clone().ok_or_else(|| {
                 DlError::Config("set an architecture or a base model".to_string())
             })?;
+        let modality = architecture.modality();
+        let preprocessing = match modality {
+            Modality::Tabular => Preprocessing {
+                tabular: Some(train_set.tabular_preprocessing()?),
+                target,
+                ..Default::default()
+            },
+            Modality::Image => Preprocessing {
+                image: Some(
+                    ImagePreprocessing::default()
+                        .with_size(self.config.image_size.unwrap_or(DEFAULT_IMAGE_SIZE)),
+                ),
+                target,
+                ..Default::default()
+            },
+            Modality::Text => {
+                return Err(DlError::Unsupported(
+                    "text models are not supported yet".to_string(),
+                ));
+            }
+        };
         let manifest = ModelManifest {
             name: self.config.name.clone(),
             nahpu_dl_version: crate::VERSION.to_string(),
-            modality: architecture.modality(),
+            modality,
             task: self.config.task,
             embedding_dim: architecture.embedding_dim(),
             architecture,
             labels,
-            preprocessing: Preprocessing {
-                tabular: Some(train_set.tabular_preprocessing()?),
-                target,
-            },
+            preprocessing,
             weights: WeightsInfo::default(),
             metrics: Default::default(),
             provenance: self.provenance(None),
@@ -276,6 +303,11 @@ impl<'a> FineTuner<'a> {
         };
         // The backbone was trained with the base model's feature scaling, so it is kept.
         manifest.preprocessing.target = target;
+        if let (Some(size), Some(image)) =
+            (self.config.image_size, &mut manifest.preprocessing.image)
+        {
+            image.size = size;
+        }
         if !same_head {
             let output_dim = manifest.output_dim().unwrap_or(1);
             network.head = Some(Head::new(manifest.embedding_dim, output_dim, autodiff));
@@ -341,9 +373,10 @@ impl<'a> TrainingSession<'a> {
             network = self.apply_strategy(network, epoch);
             rng.shuffle(&mut order);
             let mut loss_sum = 0.0;
-            for batch in order.chunks(self.config.batch_size) {
+            for (index, batch) in order.chunks(self.config.batch_size).enumerate() {
                 let batch_set = train_set.subset(batch);
-                let loss = self.batch_loss(&network, &batch_set)?;
+                let augment_seed = self.augment_seed(epoch, index);
+                let loss = self.batch_loss(&network, &batch_set, augment_seed)?;
                 loss_sum += scalar(&loss)? * batch.len() as f64;
                 let grads = GradientsParams::from_grads(loss.backward(), &network);
                 network = optimizer.step(self.config.learning_rate, network, grads);
@@ -400,11 +433,25 @@ impl<'a> TrainingSession<'a> {
         }
     }
 
-    fn batch_loss(&self, network: &Network, batch: &LabeledDataset) -> Result<Tensor<1>> {
-        let input = data::encode_batch(&self.manifest, &batch.samples, &self.autodiff)?;
-        let output = network
-            .forward(input)
-            .ok_or_else(|| DlError::Config("the network has no head to train".to_string()))?;
+    /// A different augmentation seed for every batch, derived from the run seed.
+    fn augment_seed(&self, epoch: usize, batch_index: usize) -> Option<u64> {
+        if !self.config.augment || self.manifest.modality != Modality::Image {
+            return None;
+        }
+        let mut rng =
+            SplitMix64::new(self.config.seed ^ ((epoch as u64) << 32) ^ batch_index as u64);
+        Some(rng.next_u64())
+    }
+
+    fn batch_loss(
+        &self,
+        network: &Network,
+        batch: &LabeledDataset,
+        augment_seed: Option<u64>,
+    ) -> Result<Tensor<1>> {
+        let input =
+            data::encode_batch(&self.manifest, &batch.samples, &self.autodiff, augment_seed)?;
+        let output = network.forward(input)?;
         match self.manifest.task {
             Task::Classification => {
                 let targets = self.class_targets(&batch.targets)?;

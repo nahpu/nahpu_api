@@ -8,6 +8,7 @@ use crate::manifest::{Architecture, ModelManifest};
 use crate::{DlError, Result};
 
 use super::heads::Head;
+use super::image::{MobileNetV2, ResNet};
 use super::tabular::MlpBackbone;
 
 /// A backbone that turns inputs into embeddings, plus an optional prediction head.
@@ -40,18 +41,31 @@ impl Network {
         Ok(Self { backbone, head })
     }
 
-    /// Runs the backbone and the head. Returns `None` when there is no head.
-    pub fn forward(&self, input: BatchInput) -> Option<Tensor<2>> {
-        let head = self.head.as_ref()?;
-        Some(head.forward(self.backbone.forward_features(input)))
+    /// Runs the backbone and the head.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when there is no head or the input does not fit the backbone.
+    pub fn forward(&self, input: BatchInput) -> Result<Tensor<2>> {
+        let head = self.head.as_ref().ok_or_else(|| {
+            DlError::Unsupported("the network has no prediction head".to_string())
+        })?;
+        Ok(head.forward(self.backbone.forward_features(input)?))
     }
 }
 
 /// Feature extractors, one variant per architecture family.
+// Burn modules cannot be boxed, and there is one backbone per model, so the size gap
+// between variants costs nothing that matters.
+#[allow(clippy::large_enum_variant)]
 #[derive(Module, Debug)]
 pub enum Backbone {
     /// Multilayer perceptron for tabular data.
     Mlp(MlpBackbone),
+    /// ResNet for images.
+    ResNet(ResNet),
+    /// MobileNetV2 for images.
+    MobileNetV2(MobileNetV2),
 }
 
 impl Backbone {
@@ -67,6 +81,8 @@ impl Backbone {
                 hidden,
                 dropout,
             } => MlpBackbone::new(*input_dim, hidden, *dropout, device).map(Self::Mlp),
+            Architecture::ResNet { depth } => ResNet::new(*depth, device).map(Self::ResNet),
+            Architecture::MobileNetV2 => Ok(Self::MobileNetV2(MobileNetV2::new(device))),
         }
     }
 
@@ -74,13 +90,27 @@ impl Backbone {
     pub fn embedding_dim(&self) -> usize {
         match self {
             Self::Mlp(mlp) => mlp.embedding_dim(),
+            Self::ResNet(resnet) => resnet.embedding_dim(),
+            Self::MobileNetV2(mobilenet) => mobilenet.embedding_dim(),
         }
     }
 
-    /// Computes one embedding per input row: `[batch, embedding_dim]`.
-    pub fn forward_features(&self, input: BatchInput) -> Tensor<2> {
+    /// Computes one embedding per input: `[batch, embedding_dim]`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DlError::Data`] when the input modality does not fit the backbone.
+    pub fn forward_features(&self, input: BatchInput) -> Result<Tensor<2>> {
         match (self, input) {
-            (Self::Mlp(mlp), BatchInput::Tabular(features)) => mlp.forward(features),
+            (Self::Mlp(mlp), BatchInput::Tabular(features)) => Ok(mlp.forward(features)),
+            (Self::ResNet(resnet), BatchInput::Image(images)) => Ok(resnet.forward(images)),
+            (Self::MobileNetV2(mobilenet), BatchInput::Image(images)) => {
+                Ok(mobilenet.forward(images))
+            }
+            (Self::Mlp(_), BatchInput::Image(_))
+            | (Self::ResNet(_) | Self::MobileNetV2(_), BatchInput::Tabular(_)) => Err(
+                DlError::Data("the input modality does not match the backbone".to_string()),
+            ),
         }
     }
 }

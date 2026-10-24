@@ -10,6 +10,7 @@ use crate::progress::ProgressReporter;
 use crate::{DlError, Result, store};
 
 pub mod heads;
+pub mod image;
 pub mod network;
 pub mod tabular;
 
@@ -106,7 +107,6 @@ impl DlModel {
         &self.network
     }
 
-    #[cfg(feature = "train")]
     pub(crate) fn from_parts(manifest: ModelManifest, network: Network, device: &Device) -> Self {
         Self {
             manifest,
@@ -116,20 +116,21 @@ impl DlModel {
     }
 
     fn encode(&self, samples: &[Sample]) -> Result<BatchInput> {
-        data::encode_batch(&self.manifest, samples, &self.device)
+        data::encode_batch(&self.manifest, samples, &self.device, None)
     }
 
-    fn embeddings(&self, input: BatchInput) -> Tensor<2> {
+    fn embeddings(&self, input: BatchInput) -> Result<Tensor<2>> {
         self.network.backbone.forward_features(input)
     }
 
     fn outputs(&self, input: BatchInput) -> Result<Tensor<2>> {
-        self.network.forward(input).ok_or_else(|| {
-            DlError::Unsupported(format!(
+        if self.network.head.is_none() {
+            return Err(DlError::Unsupported(format!(
                 "model `{}` has no prediction head; use embeddings instead",
                 self.manifest.name
-            ))
-        })
+            )));
+        }
+        self.network.forward(input)
     }
 
     /// Runs the model over samples in batches and returns one output row per sample.
@@ -146,7 +147,7 @@ impl DlModel {
         for batch in samples.chunks(batch_size) {
             let input = self.encode(batch)?;
             let output = match kind {
-                OutputKind::Embeddings => self.embeddings(input),
+                OutputKind::Embeddings => self.embeddings(input)?,
                 OutputKind::Outputs => self.outputs(input)?,
             };
             rows.extend(tensor_rows(output)?);

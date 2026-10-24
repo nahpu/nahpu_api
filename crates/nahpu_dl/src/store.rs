@@ -50,7 +50,7 @@ pub(crate) fn load_weights(network: &mut Network, path: &Path, format: WeightFor
     check_apply_result(&result, path)
 }
 
-fn check_apply_result(result: &ApplyResult, path: &Path) -> Result<()> {
+pub(crate) fn check_apply_result(result: &ApplyResult, path: &Path) -> Result<()> {
     if !result.errors.is_empty() {
         return Err(DlError::store(path, format!("{:?}", result.errors)));
     }
