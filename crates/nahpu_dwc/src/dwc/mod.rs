@@ -34,7 +34,7 @@ impl DwcMapper {
             "coordinate" => Self::map_coordinate_column(column_name),
             "collEvent" => Self::map_coll_event_column(column_name),
             "collPersonnel" => Self::map_coll_personnel_column(column_name),
-            "collEffort" => Self::map_coll_effort_column(column_name),
+            "collMethod" | "collEffort" => Self::map_coll_method_column(column_name),
             "narrative" => Self::map_narrative_column(column_name),
             "media" => Self::map_media_column(column_name),
             "associatedData" => Self::map_associated_data_column(column_name),
@@ -391,7 +391,7 @@ impl DwcMapper {
         }
     }
 
-    fn map_coll_effort_column(column_name: &str) -> Option<&'static str> {
+    fn map_coll_method_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "eventID" | "eventId" => Some("dwc:eventID"),
             "method" => Some("dwc:samplingProtocol"),
@@ -728,8 +728,8 @@ mod tests {
             "collEvent::collMethodNotes",
             "collPersonnel::name",
             "collPersonnel::personnelId",
-            "collEffort::method",
-            "collEffort::notes",
+            "collMethod::method",
+            "collMethod::notes",
             "taxonomy::id",
             "taxonomy::taxonClass",
             "taxonomy::taxonOrder",
@@ -914,7 +914,9 @@ mod tests {
             ("site::siteID", "dwc:locationID"),
             ("coordinate::siteID", "dwc:locationID"),
             ("collPersonnel::eventID", "dwc:eventID"),
+            ("collMethod::eventID", "dwc:eventID"),
             ("collEffort::eventID", "dwc:eventID"),
+            ("collEffort::method", "dwc:samplingProtocol"),
             ("specimen::speciesID", "dwc:taxonID"),
             ("specimen::collEventID", "dwc:eventID"),
             ("specimenPart::tissueID", "dwc:materialSampleID"),

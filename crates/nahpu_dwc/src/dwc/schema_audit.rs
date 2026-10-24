@@ -60,11 +60,11 @@ const COMPOSITE_SUPPORT_FIELDS: &[&str] = &[
 ];
 
 const UNMAPPED_FIELDS: &[&str] = &[
-    "collEffort::brand",
-    "collEffort::count",
-    "collEffort::id",
-    "collEffort::size",
     "collEvent::idSuffix",
+    "collMethod::brand",
+    "collMethod::count",
+    "collMethod::id",
+    "collMethod::size",
     "collPersonnel::id",
     "coordinate::gpsUnit",
     "coordinate::id",
@@ -151,7 +151,7 @@ enum MappingStatus {
 }
 
 #[test]
-fn every_schema_v23_field_has_an_explicit_darwin_core_status() {
+fn every_schema_v24_field_has_an_explicit_darwin_core_status() {
     let schema_fields = schema_fields();
     let mut unclassified = Vec::new();
 
@@ -207,7 +207,7 @@ fn status_for(source: &str) -> Option<MappingStatus> {
 fn schema_fields() -> BTreeSet<String> {
     let dialect = GenericDialect {};
     let statements = Parser::parse_sql(&dialect, &create_table_statements(SCHEMA))
-        .expect("schema v23 should parse as SQL");
+        .expect("schema v24 should parse as SQL");
     let mut fields = BTreeSet::new();
 
     for statement in statements {
