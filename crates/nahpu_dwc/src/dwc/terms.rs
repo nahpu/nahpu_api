@@ -158,6 +158,7 @@ const AR_OCCURRENCE_TERMS: &[BundleTerm] = &[
     dwc("coordinateUncertaintyInMeters"),
     dwc("country"),
     dwc("county"),
+    dwc("dateIdentified"),
     dwc("decimalLatitude"),
     dwc("decimalLongitude"),
     dwc("eventDate"),
@@ -271,6 +272,7 @@ const DA_EVENT_ASSERTION_TERMS: &[BundleTerm] = &[
 
 const DA_IDENTIFICATION_TERMS: &[BundleTerm] = &[
     dwc("class"),
+    dwc("dateIdentified"),
     dwc("family"),
     dwc("genus"),
     dwc("identificationID"),

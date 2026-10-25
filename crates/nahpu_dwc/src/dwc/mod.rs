@@ -632,7 +632,13 @@ impl DwcMapper {
     fn map_parasite_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "speciesID" | "speciesId" => Some("dwc:taxonID"),
-            "identifierID" | "identifierId" => Some("dwc:identifiedByID"),
+            // `identifierID` is the pre-v25 name of `determinerID`.
+            "determinerID" | "determinerId" | "identifierID" | "identifierId" => {
+                Some("dwc:identifiedByID")
+            }
+            "collectorID" | "collectorId" => Some("dwc:recordedByID"),
+            "dateDetermined" => Some("dwc:dateIdentified"),
+            "determinationMethod" => Some("dwc:identificationType"),
             "parasiteID" | "parasiteId" => Some("dwc:catalogNumber"),
             "parasiteUuid" => Some("dwc:occurrenceID"),
             "count" => Some("dwc:individualCount"),
@@ -832,7 +838,11 @@ mod tests {
             ("parasite::parasiteUuid", "dwc:occurrenceID"),
             ("parasite::parasiteID", "dwc:catalogNumber"),
             ("parasite::count", "dwc:individualCount"),
+            ("parasite::determinerID", "dwc:identifiedByID"),
             ("parasite::identifierID", "dwc:identifiedByID"),
+            ("parasite::collectorID", "dwc:recordedByID"),
+            ("parasite::dateDetermined", "dwc:dateIdentified"),
+            ("parasite::determinationMethod", "dwc:identificationType"),
             ("parasite::detectionMethod", "dwc:samplingProtocol"),
             ("eventMedia::eventID", "dwc:eventID"),
             ("eventAssociatedData::eventID", "dwc:eventID"),

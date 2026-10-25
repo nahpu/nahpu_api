@@ -24,6 +24,7 @@ const DWC_DP_PROFILE: &str = "http://rs.tdwg.org/dwc-dp/1.0/dwc-dp-profile.json"
 /// Occurrence values the Data Package carries on its `identification` table instead.
 const IDENTIFICATION_ONLY_FIELDS: &[&str] = &[
     "class",
+    "dateIdentified",
     "family",
     "genus",
     "identificationType",
