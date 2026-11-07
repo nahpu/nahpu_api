@@ -2,11 +2,18 @@
 
 ## Unreleased
 
+- Release as 0.9.0. Depend on `nahpu_db` 0.7.0 and `nahpu_archive` 0.3.2.
+- Update `quick-xml` to 0.42 and the `sqlparser` dev dependency to 0.63.
 - Align the mapper with NAHPU schema v23. Map ichthyology `fishAttribute` lot
   and individual measurements, `specimenIndividual` lot individuals, the
   `specimenPartIndividual` and `parasiteIndividual` links, and the
   `environment::conductivity` and `environment::dissolvedOxygenPercent` event
   measurements. Classify every new column in the schema audit.
+- Align the mapper with NAHPU schema v26, which renames parasites to symbionts.
+  Map the `symbiont`, `symbiontDetection`, and `symbiontIndividual` tables and
+  the `symbiontID`, `symbiontUuid`, `symbiontExamined`, and `symbiontDetected`
+  columns, and keep the `parasite*` names as legacy sources. Classify the new
+  `symbiont::interactionType` as a relationship field.
 
 ## 0.7.0
 

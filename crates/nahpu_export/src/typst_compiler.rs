@@ -1,10 +1,10 @@
 use chrono::{DateTime, Datelike, Local};
 use typst::diag::{FileError, FileResult};
-use typst::foundations::{Bytes, Datetime};
-use typst::syntax::{FileId, Source, VirtualPath};
+use typst::foundations::{Bytes, Datetime, Duration};
+use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
-use typst::{Library, World};
+use typst::{Library, LibraryExt, World};
 
 use crate::ExportError;
 
@@ -19,19 +19,21 @@ struct TypstWorld {
 
 impl TypstWorld {
     /// Constructs a world from Typst source and parsed fonts.
-    fn new(source_text: String, fonts: Vec<Font>) -> Self {
+    fn new(source_text: String, fonts: Vec<Font>) -> Result<Self, ExportError> {
         let mut book = FontBook::new();
         for font in &fonts {
             book.push(font.info().clone());
         }
 
-        let file_id = FileId::new(None, VirtualPath::new("main.typ"));
-        Self {
+        let main_path = VirtualPath::new("main.typ")
+            .map_err(|error| ExportError::TypstCompilation(error.to_string()))?;
+        let file_id = FileId::new(RootedPath::new(VirtualRoot::Project, main_path));
+        Ok(Self {
             library: LazyHash::new(Library::default()),
             book: LazyHash::new(book),
             fonts,
             source: Source::new(file_id, source_text),
-        }
+        })
     }
 }
 
@@ -49,26 +51,24 @@ impl World for TypstWorld {
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
-        if id.vpath() == &VirtualPath::new("main.typ") {
+        if id == self.source.id() {
             Ok(self.source.clone())
         } else {
-            Err(FileError::NotFound(
-                id.vpath().as_rootless_path().to_path_buf(),
-            ))
+            Err(FileError::NotFound(id.vpath().get_without_slash().into()))
         }
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        let path = id.vpath().as_rootless_path();
+        let path = std::path::Path::new(id.vpath().get_without_slash());
         // Generated sources use absolute image paths, so first read the path directly.
         if let Ok(bytes) = std::fs::read(path) {
-            return Ok(bytes.into());
+            return Ok(Bytes::new(bytes));
         }
 
         // On Unix and macOS, restore the leading slash removed by Typst.
         let with_slash = std::path::Path::new("/").join(path);
         if let Ok(bytes) = std::fs::read(&with_slash) {
-            return Ok(bytes.into());
+            return Ok(Bytes::new(bytes));
         }
 
         // On Windows, restore drive-letter paths such as C/Users or C:/Users.
@@ -80,7 +80,7 @@ impl World for TypstWorld {
                 let rest = &path_str[2..];
                 let win_path = format!("{}:\\{}", drive, rest.replace('/', "\\"));
                 if let Ok(bytes) = std::fs::read(&win_path) {
-                    return Ok(bytes.into());
+                    return Ok(Bytes::new(bytes));
                 }
             }
         }
@@ -92,7 +92,7 @@ impl World for TypstWorld {
         self.fonts.get(id).cloned()
     }
 
-    fn today(&self, _offset: Option<i64>) -> Option<Datetime> {
+    fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
         let now: DateTime<Local> = Local::now();
         Datetime::from_ymd(now.year(), now.month() as u8, now.day() as u8)
     }
@@ -108,14 +108,14 @@ impl TypstCompiler {
     pub fn new(font_bytes: Vec<Vec<u8>>) -> Self {
         let fonts = font_bytes
             .into_iter()
-            .flat_map(|bytes| Font::iter(Bytes::from(bytes)))
+            .flat_map(|bytes| Font::iter(Bytes::new(bytes)))
             .collect();
         Self { fonts }
     }
 
     /// Compiles Typst source into PDF bytes.
     pub fn compile(&self, source: &str) -> Result<Vec<u8>, ExportError> {
-        let world = TypstWorld::new(source.to_owned(), self.fonts.clone());
+        let world = TypstWorld::new(source.to_owned(), self.fonts.clone())?;
 
         let document = typst::compile(&world)
             .output

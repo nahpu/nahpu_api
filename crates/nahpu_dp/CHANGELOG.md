@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- Rename the `parasites` controlled-vocabulary section to `symbionts`, written
+  to `vocabularies/symbionts.csv`, to match NAHPU schema v26.
+- Bump the NAHPU Data Package format contract to 3.4.
+- Depend on `nahpu_archive` 0.3.2.
+- Update `chrono`, `serde`, `serde_json`, and `tempfile` to their latest patch releases.
+
 ## 0.3.4
 
 - Accept an empty SQLite enum mapping list. The list is scoped to the tables a

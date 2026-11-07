@@ -1,6 +1,6 @@
 [package]
 name = "nahpu_archive"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 authors = ["Heru Handika <herubiolog@gmail.com>"]
 description = "Archive utilities for ZIP, gzip, and tar.gz files used by NAHPU."
@@ -14,9 +14,9 @@ homepage = "https://www.nahpu.app/"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-flate2 = "1.1.*"
-tar = "0.4"
+flate2 = "1.1.11"
+tar = "0.4.46"
 zip = "9.4.1"
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = "3.27"

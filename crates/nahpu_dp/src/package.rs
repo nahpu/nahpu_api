@@ -21,7 +21,7 @@ const PROJECT_JSON_ONLY_COLLECTIONS: [&str; 1] = ["personnelPhoto"];
 
 const PROJECT_PATH: &str = "nahpu-project.json";
 const ENUM_MAPPING_PATH: &str = "mappings/sqlite_enums.csv";
-const VOCABULARY_SECTIONS: [&str; 4] = ["site", "events", "specimens", "parasites"];
+const VOCABULARY_SECTIONS: [&str; 4] = ["site", "events", "specimens", "symbionts"];
 const REQUIRED_VOCABULARIES: [(&str, &str); 6] = [
     ("site", "siteTypes"),
     ("site", "habitatTypes"),
@@ -446,7 +446,7 @@ fn data_package_json(request: &PackageRequest) -> Value {
         controlled_vocabulary_resource("site"),
         controlled_vocabulary_resource("events"),
         controlled_vocabulary_resource("specimens"),
-        controlled_vocabulary_resource("parasites"),
+        controlled_vocabulary_resource("symbionts"),
         simple_resource("nahpu-project", PROJECT_PATH, "json", "application/json"),
         simple_resource(
             "user-configs",
@@ -610,7 +610,7 @@ fn simple_resource(name: &str, path: &str, format: &str, media_type: &str) -> Va
 
 fn nahpu_toml(request: &PackageRequest) -> String {
     let mut output = format!(
-        "format_name = \"NAHPU Data Package\"\nformat_version = \"{}\"\ncreated_at = \"{}\"\n\n[application]\nname = \"{}\"\nversion = \"{}\"\nbuild_number = \"{}\"\n\n[schemas]\ndatabase = {}\nuser_configs = {}\n\n[package]\ndescriptor = \"datapackage.json\"\nproject = \"{}\"\nuser_configs = \"configs/user_configs.json\"\nenum_mappings = \"{}\"\ntable_count = {}\nenum_mapping_count = {}\ncontrolled_vocabulary_count = {}\n\n[package.controlled_vocabularies]\nsite = \"{}\"\nevents = \"{}\"\nspecimens = \"{}\"\nparasites = \"{}\"\n\n[nahpu_api.dependencies]\n",
+        "format_name = \"NAHPU Data Package\"\nformat_version = \"{}\"\ncreated_at = \"{}\"\n\n[application]\nname = \"{}\"\nversion = \"{}\"\nbuild_number = \"{}\"\n\n[schemas]\ndatabase = {}\nuser_configs = {}\n\n[package]\ndescriptor = \"datapackage.json\"\nproject = \"{}\"\nuser_configs = \"configs/user_configs.json\"\nenum_mappings = \"{}\"\ntable_count = {}\nenum_mapping_count = {}\ncontrolled_vocabulary_count = {}\n\n[package.controlled_vocabularies]\nsite = \"{}\"\nevents = \"{}\"\nspecimens = \"{}\"\nsymbionts = \"{}\"\n\n[nahpu_api.dependencies]\n",
         FORMAT_VERSION,
         Utc::now().to_rfc3339(),
         toml_escape(&request.app_name),
@@ -626,7 +626,7 @@ fn nahpu_toml(request: &PackageRequest) -> String {
         vocabulary_path("site"),
         vocabulary_path("events"),
         vocabulary_path("specimens"),
-        vocabulary_path("parasites"),
+        vocabulary_path("symbionts"),
     );
     for (name, version) in &request.dependencies {
         output.push_str(&format!(
@@ -1260,13 +1260,13 @@ mod tests {
     }
 
     #[test]
-    fn accepts_empty_optional_parasite_vocabulary() {
+    fn accepts_empty_optional_symbiont_vocabulary() {
         let directory = tempdir().unwrap();
         let mut request = request(directory.path(), ArchiveFormat::Zip);
         request.controlled_vocabularies.push(ControlledVocabulary {
-            section: "parasites".to_string(),
-            config_key: "parasiteCategories".to_string(),
-            vocabulary_name: "Parasite category".to_string(),
+            section: "symbionts".to_string(),
+            config_key: "symbiontCategories".to_string(),
+            vocabulary_name: "Symbiont category".to_string(),
             values: Vec::new(),
         });
 
@@ -1274,12 +1274,12 @@ mod tests {
     }
 
     #[test]
-    fn accepts_optional_parasite_and_legacy_weather_tables() {
+    fn accepts_optional_symbiont_and_legacy_weather_tables() {
         let directory = tempdir().unwrap();
         let mut request = request(directory.path(), ArchiveFormat::Zip);
         let mut project_json: Value = serde_json::from_str(&request.project_json).unwrap();
         project_json["records"]["weather"] = serde_json::json!([{"id": 1}]);
-        project_json["records"]["parasite"] = serde_json::json!([{"id": 2}]);
+        project_json["records"]["symbiont"] = serde_json::json!([{"id": 2}]);
         request.project_json = serde_json::to_string(&project_json).unwrap();
         request.tables.extend([
             PackageTable {
@@ -1294,7 +1294,7 @@ mod tests {
                 rows: vec![BTreeMap::from([("id".to_string(), Value::from(1))])],
             },
             PackageTable {
-                name: "parasite".to_string(),
+                name: "symbiont".to_string(),
                 columns: vec![PackageColumn {
                     name: "id".to_string(),
                     data_type: "INT".to_string(),
@@ -1314,7 +1314,7 @@ mod tests {
         let directory = tempdir().unwrap();
         let mut request = request(directory.path(), ArchiveFormat::Zip);
         let mut project_json: Value = serde_json::from_str(&request.project_json).unwrap();
-        project_json["records"]["parasite"] = serde_json::json!([{"id": 2}]);
+        project_json["records"]["symbiont"] = serde_json::json!([{"id": 2}]);
         request.project_json = serde_json::to_string(&project_json).unwrap();
 
         let errors = validate_request(&request);
@@ -1322,7 +1322,7 @@ mod tests {
         assert!(
             errors
                 .iter()
-                .any(|error| { error.contains("Project JSON contains data for table parasite") })
+                .any(|error| { error.contains("Project JSON contains data for table symbiont") })
         );
     }
 
@@ -1517,7 +1517,7 @@ mod tests {
                 .unwrap();
             assert!(specimen_resource["schema"].get("foreignKeys").is_none());
             assert_eq!(
-                fs::read_to_string(extracted.join(vocabulary_path("parasites"))).unwrap(),
+                fs::read_to_string(extracted.join(vocabulary_path("symbionts"))).unwrap(),
                 "config_key,vocabulary_name,list_index,value\n"
             );
         }

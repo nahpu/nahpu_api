@@ -1,6 +1,6 @@
 [package]
 name = "nahpu_dp"
-version = "0.3.4"
+version = "0.4.0"
 edition = "2024"
 authors = ["Heru Handika <herubiolog@gmail.com>"]
 description = "Create and validate reproducible Frictionless Data Packages for NAHPU."
@@ -14,11 +14,11 @@ readme = "README.md"
 include = ["src/**", "tests/**", "Cargo.toml", "README.md", "CHANGELOG.md"]
 
 [dependencies]
-chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde"] }
 csv = "1.4"
-nahpu_archive = { version = "0.3.0", path = "../nahpu_archive" }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+nahpu_archive = { version = "0.3.2", path = "../nahpu_archive" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = "3.27"

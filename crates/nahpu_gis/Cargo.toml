@@ -1,6 +1,6 @@
 [package]
 name = "nahpu_gis"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2024"
 authors = ["Heru Handika <herubiolog@gmail.com>"]
 description = "A utility crate for spatial analysis and GIS data processing."
@@ -12,15 +12,15 @@ readme = "README.md"
 homepage = "https://www.nahpu.app/"
 
 [dependencies]
-dbase = "0.7.0"
-geo = "0.29"
+dbase = "0.8"
+geo = "0.33.1"
 geojson = "1.0.0"
-kml = { version = "0.13.0", default-features = false }
-nahpu_archive = { version = "0.3.1", path = "../nahpu_archive" }
-quick-xml = "0.39.4"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
-shapefile = { version = "0.8.0", features = ["geo-types"] }
+kml = { version = "0.15", default-features = false }
+nahpu_archive = { version = "0.3.2", path = "../nahpu_archive" }
+quick-xml = "0.42"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+shapefile = { version = "0.9", features = ["geo-types"] }
 tempfile = "3.27.0"
-thiserror = "2.0"
-utm = "0.1"
+thiserror = "2.0.21"
+utm = "0.1.6"
