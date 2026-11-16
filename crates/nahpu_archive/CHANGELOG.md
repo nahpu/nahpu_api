@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+- Update `flate2` to 1.1.11 and `tar` to 0.4.46.
+
 ## 0.2.0
 
 - Add safe multi-file tar.gz creation and extraction.

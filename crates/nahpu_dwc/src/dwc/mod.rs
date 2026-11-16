@@ -34,7 +34,7 @@ impl DwcMapper {
             "coordinate" => Self::map_coordinate_column(column_name),
             "collEvent" => Self::map_coll_event_column(column_name),
             "collPersonnel" => Self::map_coll_personnel_column(column_name),
-            "collEffort" => Self::map_coll_effort_column(column_name),
+            "collMethod" | "collEffort" => Self::map_coll_method_column(column_name),
             "narrative" => Self::map_narrative_column(column_name),
             "media" => Self::map_media_column(column_name),
             "associatedData" => Self::map_associated_data_column(column_name),
@@ -52,8 +52,13 @@ impl DwcMapper {
             "herpAttribute" => Self::map_herp_attribute_column(column_name),
             "invertebrateAttribute" => Self::map_invertebrate_attribute_column(column_name),
             "fossilAttribute" => Self::map_fossil_attribute_column(column_name),
-            "parasiteDetection" => Self::map_parasite_detection_column(column_name),
-            "parasite" => Self::map_parasite_column(column_name),
+            "fishAttribute" => Self::map_fish_attribute_column(column_name),
+            "specimenIndividual" => Self::map_specimen_individual_column(column_name),
+            // v26 renamed `parasite` and `parasiteDetection` to symbionts.
+            "symbiontDetection" | "parasiteDetection" => {
+                Self::map_symbiont_detection_column(column_name)
+            }
+            "symbiont" | "parasite" => Self::map_symbiont_column(column_name),
             "eventMedia" => Self::map_event_media_column(column_name),
             "eventAssociatedData" => Self::map_event_associated_data_column(column_name),
             "siteAssociatedData" => Self::map_site_associated_data_column(column_name),
@@ -207,8 +212,25 @@ impl DwcMapper {
             "arthropodAttribute::canopyCover" => ("canopy cover", None),
             "siteAttribute::canopyCover" => ("canopy cover", None),
             "fossilAttribute::weight" => ("weight", Some("g")),
-            "parasiteDetection::parasiteExamined" => ("parasites examined", None),
-            "parasiteDetection::parasiteDetected" => ("parasites detected", None),
+            "fishAttribute::standardLength" | "specimenIndividual::standardLength" => {
+                ("standard length", Some("mm"))
+            }
+            "fishAttribute::totalLength" | "specimenIndividual::totalLength" => {
+                ("total length", Some("mm"))
+            }
+            "fishAttribute::weight" | "specimenIndividual::weight" => ("weight", Some("g")),
+            "fishAttribute::minStandardLength" => ("minimum standard length", Some("mm")),
+            "fishAttribute::maxStandardLength" => ("maximum standard length", Some("mm")),
+            "fishAttribute::minTotalLength" => ("minimum total length", Some("mm")),
+            "fishAttribute::maxTotalLength" => ("maximum total length", Some("mm")),
+            "fishAttribute::minWeight" => ("minimum weight", Some("g")),
+            "fishAttribute::maxWeight" => ("maximum weight", Some("g")),
+            "symbiontDetection::symbiontExamined" | "parasiteDetection::parasiteExamined" => {
+                ("symbionts examined", None)
+            }
+            "symbiontDetection::symbiontDetected" | "parasiteDetection::parasiteDetected" => {
+                ("symbionts detected", None)
+            }
             "environment::lowestDayTempC" | "weather::lowestDayTempC" => {
                 ("lowest day temperature", Some("°C"))
             }
@@ -248,6 +270,8 @@ impl DwcMapper {
             "environment::flowVelocity"
             | "weather::flowVelocity"
             | "arthropodAttribute::flowVelocity" => ("flow velocity", Some("m/s")),
+            "environment::conductivity" => ("conductivity", Some("µS/cm")),
+            "environment::dissolvedOxygenPercent" => ("dissolved oxygen saturation", Some("%")),
             _ => return None,
         };
         Some(DwcMapping {
@@ -263,6 +287,10 @@ impl DwcMapper {
                 "birdAttribute::weight" => Some("birdAttribute::weightUnit"),
                 "herpAttribute::weight" => Some("herpAttribute::weightUnit"),
                 "fossilAttribute::weight" => Some("fossilAttribute::weightUnit"),
+                "fishAttribute::weight"
+                | "fishAttribute::minWeight"
+                | "fishAttribute::maxWeight" => Some("fishAttribute::weightUnit"),
+                "specimenIndividual::weight" => Some("specimenIndividual::weightUnit"),
                 _ => None,
             },
         })
@@ -370,7 +398,7 @@ impl DwcMapper {
         }
     }
 
-    fn map_coll_effort_column(column_name: &str) -> Option<&'static str> {
+    fn map_coll_method_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "eventID" | "eventId" => Some("dwc:eventID"),
             "method" => Some("dwc:samplingProtocol"),
@@ -578,7 +606,29 @@ impl DwcMapper {
         }
     }
 
-    fn map_parasite_detection_column(column_name: &str) -> Option<&'static str> {
+    /// Maps fish individual and lot records added in NAHPU schema v23.
+    fn map_fish_attribute_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "specimenUuid" => Some("dwc:occurrenceID"),
+            "sex" => Some("dwc:sex"),
+            "lifeStage" => Some("dwc:lifeStage"),
+            "individualCount" => Some("dwc:individualCount"),
+            "remark" => Some("dwc:occurrenceRemarks"),
+            _ => None,
+        }
+    }
+
+    /// Maps lot individuals, exported as whole-organism material entities.
+    fn map_specimen_individual_column(column_name: &str) -> Option<&'static str> {
+        match column_name {
+            "specimenUuid" => Some("dwc:occurrenceID"),
+            "individualID" => Some("dwc:otherCatalogNumbers"),
+            "remark" => Some("dwc:materialEntityRemarks"),
+            _ => None,
+        }
+    }
+
+    fn map_symbiont_detection_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "specimenUuid" => Some("dwc:occurrenceID"),
             "detectionRemark" => Some("dwc:occurrenceRemarks"),
@@ -586,12 +636,19 @@ impl DwcMapper {
         }
     }
 
-    fn map_parasite_column(column_name: &str) -> Option<&'static str> {
+    fn map_symbiont_column(column_name: &str) -> Option<&'static str> {
         match column_name {
             "speciesID" | "speciesId" => Some("dwc:taxonID"),
-            "identifierID" | "identifierId" => Some("dwc:identifiedByID"),
-            "parasiteID" | "parasiteId" => Some("dwc:catalogNumber"),
-            "parasiteUuid" => Some("dwc:occurrenceID"),
+            // `identifierID` is the pre-v25 name of `determinerID`.
+            "determinerID" | "determinerId" | "identifierID" | "identifierId" => {
+                Some("dwc:identifiedByID")
+            }
+            "collectorID" | "collectorId" => Some("dwc:recordedByID"),
+            "dateDetermined" => Some("dwc:dateIdentified"),
+            "determinationMethod" => Some("dwc:identificationType"),
+            // `parasiteID` and `parasiteUuid` are the pre-v26 names.
+            "symbiontID" | "symbiontId" | "parasiteID" | "parasiteId" => Some("dwc:catalogNumber"),
+            "symbiontUuid" | "parasiteUuid" => Some("dwc:occurrenceID"),
             "count" => Some("dwc:individualCount"),
             "preparationMethod" | "treatment" => Some("dwc:preparations"),
             "lifeStage" => Some("dwc:lifeStage"),
@@ -685,8 +742,8 @@ mod tests {
             "collEvent::collMethodNotes",
             "collPersonnel::name",
             "collPersonnel::personnelId",
-            "collEffort::method",
-            "collEffort::notes",
+            "collMethod::method",
+            "collMethod::notes",
             "taxonomy::id",
             "taxonomy::taxonClass",
             "taxonomy::taxonOrder",
@@ -785,12 +842,20 @@ mod tests {
                 "fossilAttribute::specimenDescription",
                 "dwc:materialEntityRemarks",
             ),
+            ("symbiontDetection::specimenUuid", "dwc:occurrenceID"),
+            ("symbiont::symbiontUuid", "dwc:occurrenceID"),
+            ("symbiont::symbiontID", "dwc:catalogNumber"),
+            ("symbiont::count", "dwc:individualCount"),
+            ("symbiont::determinerID", "dwc:identifiedByID"),
+            ("symbiont::identifierID", "dwc:identifiedByID"),
+            ("symbiont::collectorID", "dwc:recordedByID"),
+            ("symbiont::dateDetermined", "dwc:dateIdentified"),
+            ("symbiont::determinationMethod", "dwc:identificationType"),
+            ("symbiont::detectionMethod", "dwc:samplingProtocol"),
+            // Source keys saved before v26.
             ("parasiteDetection::specimenUuid", "dwc:occurrenceID"),
             ("parasite::parasiteUuid", "dwc:occurrenceID"),
             ("parasite::parasiteID", "dwc:catalogNumber"),
-            ("parasite::count", "dwc:individualCount"),
-            ("parasite::identifierID", "dwc:identifiedByID"),
-            ("parasite::detectionMethod", "dwc:samplingProtocol"),
             ("eventMedia::eventID", "dwc:eventID"),
             ("eventAssociatedData::eventID", "dwc:eventID"),
             ("siteAssociatedData::siteId", "dwc:locationID"),
@@ -806,6 +871,14 @@ mod tests {
             ("invertebrateAttribute::lifeStage", "dwc:lifeStage"),
             ("invertebrateAttribute::caste", "dwc:caste"),
             ("fossilAttribute::ontogeneticStage", "dwc:lifeStage"),
+            ("fishAttribute::specimenUuid", "dwc:occurrenceID"),
+            ("fishAttribute::lifeStage", "dwc:lifeStage"),
+            ("fishAttribute::individualCount", "dwc:individualCount"),
+            (
+                "specimenIndividual::individualID",
+                "dwc:otherCatalogNumbers",
+            ),
+            ("specimenIndividual::remark", "dwc:materialEntityRemarks"),
         ] {
             assert_eq!(
                 DwcMapper::get_dwc_term_for_source_key(source_key),
@@ -863,7 +936,9 @@ mod tests {
             ("site::siteID", "dwc:locationID"),
             ("coordinate::siteID", "dwc:locationID"),
             ("collPersonnel::eventID", "dwc:eventID"),
+            ("collMethod::eventID", "dwc:eventID"),
             ("collEffort::eventID", "dwc:eventID"),
+            ("collEffort::method", "dwc:samplingProtocol"),
             ("specimen::speciesID", "dwc:taxonID"),
             ("specimen::collEventID", "dwc:eventID"),
             ("specimenPart::tissueID", "dwc:materialSampleID"),
@@ -1014,7 +1089,8 @@ mod tests {
     #[test]
     fn relationship_and_ambiguous_fields_are_not_forced_into_direct_terms() {
         for source_key in [
-            "parasite::specimenUuid",
+            "symbiont::specimenUuid",
+            "symbiont::interactionType",
             "specimenPart::pmi",
             "narrative::narrative",
         ] {
@@ -1033,6 +1109,13 @@ mod tests {
             ("birdAttribute::weight", "birdAttribute::weightUnit"),
             ("herpAttribute::weight", "herpAttribute::weightUnit"),
             ("fossilAttribute::weight", "fossilAttribute::weightUnit"),
+            ("fishAttribute::weight", "fishAttribute::weightUnit"),
+            ("fishAttribute::minWeight", "fishAttribute::weightUnit"),
+            ("fishAttribute::maxWeight", "fishAttribute::weightUnit"),
+            (
+                "specimenIndividual::weight",
+                "specimenIndividual::weightUnit",
+            ),
         ] {
             let mapping =
                 DwcMapper::get_dwc_mapping_for_source_key(source).expect("weight should be mapped");

@@ -4,7 +4,11 @@ use crate::io::layers::{read_geojson, read_zipped_shapefile};
 use crate::types::CoordinateData;
 use geojson::{Feature, GeometryValue};
 use kml::{Kml, KmlReader, types::Geometry as KmlGeometry};
-use quick_xml::{Reader, events::Event};
+use quick_xml::{
+    Reader, XmlVersion,
+    escape::resolve_predefined_entity,
+    events::{BytesRef, Event},
+};
 use std::{fs, path::Path};
 
 #[derive(Debug, Clone)]
@@ -150,25 +154,25 @@ fn visit_kml(value: Kml<f64>, stem: &str, result: &mut CoordinateImportResult) {
 fn from_gpx(path: &Path) -> Result<CoordinateImportResult, String> {
     let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
     let mut reader = Reader::from_str(&content);
-    reader.config_mut().trim_text(true);
     let stem = file_stem(path);
     let mut coordinates = Vec::new();
     let mut current: Option<CoordinateData> = None;
-    let mut field: Option<Vec<u8>> = None;
+    let mut field: Option<String> = None;
+    let mut text = String::new();
     let mut skipped_count = 0;
     loop {
         match reader.read_event().map_err(|error| error.to_string())? {
-            Event::Start(element) if element.name().as_ref() == b"wpt" => {
+            Event::Start(element) if element.name().as_ref() == "wpt" => {
                 let mut lat = None;
                 let mut lon = None;
                 for attribute in element.attributes() {
                     let attribute = attribute.map_err(|error| error.to_string())?;
                     let value = attribute
-                        .decode_and_unescape_value(reader.decoder())
+                        .normalized_value(XmlVersion::Implicit1_0)
                         .map_err(|error| error.to_string())?;
                     match attribute.key.as_ref() {
-                        b"lat" => lat = value.parse::<f64>().ok(),
-                        b"lon" => lon = value.parse::<f64>().ok(),
+                        "lat" => lat = value.parse::<f64>().ok(),
+                        "lon" => lon = value.parse::<f64>().ok(),
                         _ => {}
                     }
                 }
@@ -181,25 +185,16 @@ fn from_gpx(path: &Path) -> Result<CoordinateImportResult, String> {
                 });
             }
             Event::Start(element) if current.is_some() => {
-                field = Some(element.name().as_ref().to_vec())
+                field = Some(element.name().as_ref().to_owned());
+                text.clear();
             }
-            Event::Text(text) if current.is_some() => {
-                let value = text
-                    .decode()
-                    .map_err(|error| error.to_string())?
-                    .into_owned();
-                if let Some(coordinate) = current.as_mut() {
-                    match field.as_deref() {
-                        Some(b"name") => coordinate.name_id = value,
-                        Some(b"desc") | Some(b"cmt") if coordinate.notes.is_none() => {
-                            coordinate.notes = Some(value);
-                        }
-                        Some(b"ele") => coordinate.elevation_in_meter = value.parse().ok(),
-                        _ => {}
-                    }
-                }
+            // Text arrives in pieces split around entity references, so it is
+            // collected here and applied when the field element ends.
+            Event::Text(content) if field.is_some() => text.push_str(&content.xml10_content()),
+            Event::GeneralRef(reference) if field.is_some() => {
+                text.push_str(&general_ref_text(&reference)?);
             }
-            Event::End(element) if element.name().as_ref() == b"wpt" => {
+            Event::End(element) if element.name().as_ref() == "wpt" => {
                 if let Some(mut coordinate) = current.take() {
                     if coordinate
                         .decimal_latitude
@@ -216,7 +211,12 @@ fn from_gpx(path: &Path) -> Result<CoordinateImportResult, String> {
                 }
                 field = None;
             }
-            Event::End(_) => field = None,
+            Event::End(_) => {
+                if let (Some(name), Some(coordinate)) = (field.take(), current.as_mut()) {
+                    apply_gpx_field(coordinate, &name, text.trim());
+                }
+                text.clear();
+            }
             Event::Eof => break,
             _ => {}
         }
@@ -232,6 +232,30 @@ fn from_gpx(path: &Path) -> Result<CoordinateImportResult, String> {
         skipped_count,
         warnings,
     })
+}
+
+fn apply_gpx_field(coordinate: &mut CoordinateData, field: &str, value: &str) {
+    match field {
+        "name" => coordinate.name_id = value.to_owned(),
+        "desc" | "cmt" if coordinate.notes.is_none() => {
+            coordinate.notes = Some(value.to_owned());
+        }
+        "ele" => coordinate.elevation_in_meter = value.parse().ok(),
+        _ => {}
+    }
+}
+
+fn general_ref_text(reference: &BytesRef<'_>) -> Result<String, String> {
+    if let Some(character) = reference
+        .resolve_char_ref()
+        .map_err(|error| error.to_string())?
+    {
+        return Ok(character.to_string());
+    }
+    let name = reference.xml10_content();
+    Ok(resolve_predefined_entity(&name)
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("&{name};")))
 }
 
 fn string_property(
@@ -298,6 +322,29 @@ mod tests {
         assert_eq!(result.coordinates.len(), 1);
         assert_eq!(result.coordinates[0].name_id, "A");
         assert_eq!(result.skipped_count, 1);
+    }
+
+    #[test]
+    fn imports_gpx_text_with_entity_references() {
+        let directory = tempdir().expect("temporary directory should be created");
+        let path = directory.path().join("refs.gpx");
+        fs::write(
+            &path,
+            concat!(
+                r#"<gpx><wpt lat="1" lon="2">"#,
+                "<name> Camp &amp; Trap &#65; </name>",
+                "<desc>Ridge &lt;north&gt;</desc></wpt></gpx>",
+            ),
+        )
+        .expect("test GPX should be written");
+        let result =
+            CoordinateImportResult::import(&path).expect("coordinate import should succeed");
+        assert_eq!(result.coordinates.len(), 1);
+        assert_eq!(result.coordinates[0].name_id, "Camp & Trap A");
+        assert_eq!(
+            result.coordinates[0].notes.as_deref(),
+            Some("Ridge <north>")
+        );
     }
 
     #[test]

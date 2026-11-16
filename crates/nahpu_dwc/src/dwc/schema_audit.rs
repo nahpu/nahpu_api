@@ -18,10 +18,13 @@ const RELATIONSHIP_FIELDS: &[&str] = &[
     "eventMedia::mediaId",
     "narrativeMedia::mediaId",
     "narrativeMedia::narrativeId",
-    "parasite::anatomicalLocation",
-    "parasite::associationStatus",
-    "parasite::category",
-    "parasite::specimenUuid",
+    "symbiont::anatomicalLocation",
+    "symbiont::associationStatus",
+    "symbiont::category",
+    "symbiont::interactionType",
+    "symbiont::specimenUuid",
+    "symbiontIndividual::individualID",
+    "symbiontIndividual::symbiontID",
     "personnelList::personnelUuid",
     "personnelList::projectUuid",
     "siteAssociatedData::associatedDataId",
@@ -31,8 +34,11 @@ const RELATIONSHIP_FIELDS: &[&str] = &[
     "siteMedia::siteId",
     "specimenAssociatedData::associatedDataId",
     "specimenAssociatedData::specimenUuid",
+    "specimenIndividual::id",
     "specimenPart::personnelId",
     "specimenPart::specimenUuid",
+    "specimenPartIndividual::individualID",
+    "specimenPartIndividual::partID",
     "specimenMedia::mediaId",
     "specimenMedia::specimenUuid",
     "specimen::catalogerID",
@@ -41,23 +47,29 @@ const RELATIONSHIP_FIELDS: &[&str] = &[
 
 const COMPOSITE_SUPPORT_FIELDS: &[&str] = &[
     "birdAttribute::weightUnit",
+    "fishAttribute::specimenType",
+    "fishAttribute::weightUnit",
     "fossilAttribute::weightUnit",
     "herpAttribute::weightUnit",
     "mammalAttribute::weightUnit",
     "specimen::condition",
     "specimen::coordinateExtentMeters",
     "specimen::projectFieldNumber",
+    "specimenIndividual::lifeStage",
+    "specimenIndividual::sex",
+    "specimenIndividual::weightUnit",
 ];
 
 const UNMAPPED_FIELDS: &[&str] = &[
-    "collEffort::brand",
-    "collEffort::count",
-    "collEffort::id",
-    "collEffort::size",
     "collEvent::idSuffix",
+    "collMethod::brand",
+    "collMethod::count",
+    "collMethod::id",
+    "collMethod::size",
     "collPersonnel::id",
     "coordinate::gpsUnit",
     "coordinate::id",
+    "fishAttribute::isAutoRange",
     "fossilSite::biozone",
     "fossilSite::depositionalContinent",
     "fossilSite::depositionalEnvironmentType",
@@ -82,13 +94,13 @@ const UNMAPPED_FIELDS: &[&str] = &[
     "narrative::narrative",
     "narrative::time",
     "narrative::writerId",
-    "parasite::datePreserved",
-    "parasite::id",
-    "parasite::museumLoan",
-    "parasite::museumPermanent",
-    "parasite::storage",
-    "parasite::storageLocation",
-    "parasite::timePreserved",
+    "symbiont::datePreserved",
+    "symbiont::id",
+    "symbiont::museumLoan",
+    "symbiont::museumPermanent",
+    "symbiont::storage",
+    "symbiont::storageLocation",
+    "symbiont::timePreserved",
     "personnel::affiliation",
     "personnel::currentFieldNumber",
     "personnel::email",
@@ -140,7 +152,7 @@ enum MappingStatus {
 }
 
 #[test]
-fn every_schema_v22_field_has_an_explicit_darwin_core_status() {
+fn every_schema_v26_field_has_an_explicit_darwin_core_status() {
     let schema_fields = schema_fields();
     let mut unclassified = Vec::new();
 
@@ -196,7 +208,7 @@ fn status_for(source: &str) -> Option<MappingStatus> {
 fn schema_fields() -> BTreeSet<String> {
     let dialect = GenericDialect {};
     let statements = Parser::parse_sql(&dialect, &create_table_statements(SCHEMA))
-        .expect("schema v22 should parse as SQL");
+        .expect("schema v26 should parse as SQL");
     let mut fields = BTreeSet::new();
 
     for statement in statements {
