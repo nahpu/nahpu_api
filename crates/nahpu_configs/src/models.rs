@@ -240,6 +240,10 @@ pub struct DocumentLayoutPreset {
     pub fill_page: bool,
     #[serde(alias = "multiBlockMode", default = "default_multi_block_mode")]
     pub multi_block_mode: String,
+    /// Optional short description shown with the preset. Layouts saved before this
+    /// field existed read as `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Represents whether a stored document layout can be read by the current schema.

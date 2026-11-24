@@ -2,5 +2,16 @@
 name = "nahpu_ml"
 version = "0.1.0"
 edition = "2024"
+authors = ["Heru Handika <herubiolog@gmail.com>"]
+description = "Statistical and machine learning methods to analyze biodiversity data."
+repository = "https://github.com/hhandika/nahpu_api"
+license = "MIT"
+keywords = ["statistics", "pca", "biodiversity", "morphometrics"]
+categories = ["science"]
+readme = "README.md"
+homepage = "https://www.nahpu.app/"
 
 [dependencies]
+nalgebra = "0.35.0"
+statrs = "0.19.1"
+thiserror = "2.0.21"

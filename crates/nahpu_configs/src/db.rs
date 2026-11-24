@@ -924,6 +924,7 @@ mod tests {
             blocks: vec![block],
             fill_page: false,
             multi_block_mode: "Continuous".to_string(),
+            description: None,
         };
 
         // Insert
@@ -946,6 +947,50 @@ mod tests {
 
         // Clean up
         let _ = std::fs::remove_file(db_path);
+    }
+
+    #[test]
+    fn test_document_layout_description_is_optional() {
+        let legacy = r#"{
+            "name": "Legacy",
+            "layoutType": "WholePage",
+            "pageSizeKey": "Letter",
+            "pageOrientation": "portrait",
+            "pagePadTopMm": 8.0,
+            "pagePadLeftMm": 8.0,
+            "pagePadRightMm": 8.0,
+            "pagePadBottomMm": 8.0,
+            "blocks": []
+        }"#;
+        let layout: DocumentLayoutPreset = serde_json::from_str(legacy).unwrap();
+        assert_eq!(layout.description, None);
+        let serialized = serde_json::to_value(&layout).unwrap();
+        assert!(serialized.get("description").is_none());
+
+        let _guard = TEST_LOCK.lock().unwrap();
+        let mut db_path = std::env::temp_dir();
+        db_path.push(format!(
+            "test_config_description_{}.redb",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        ConfigDb::init(db_path.to_str().unwrap()).unwrap();
+        let db = ConfigDb::get_instance().unwrap();
+
+        let described = DocumentLayoutPreset {
+            name: "Described".to_string(),
+            description: Some("Skin tags for the field season".to_string()),
+            ..layout
+        };
+        db.set_document_layout("Described", &described).unwrap();
+        let stored = db.get_document_layout("Described").unwrap().unwrap();
+        assert_eq!(
+            stored.description.as_deref(),
+            Some("Skin tags for the field season")
+        );
+        db.delete_document_layout("Described").unwrap();
     }
 
     #[test]
@@ -1017,6 +1062,7 @@ mod tests {
             ],
             fill_page: false,
             multi_block_mode: "Continuous".to_string(),
+            description: None,
         };
         db.set_document_layout(&layout_name, &layout).unwrap();
 

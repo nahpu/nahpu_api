@@ -11,6 +11,7 @@ This Rust workspace powers the NAHPU API. The root `Cargo.toml` lists member cra
 - `crates/nahpu_gis`: GIS import and conversion.
 - `crates/nahpu_configs`: user configuration and preset storage.
 - `crates/nahpu_dl`: deep learning models, inference, embeddings, and fine-tuning (Burn).
+- `crates/nahpu_ml`: descriptive statistics and principal component analysis.
 - `assets/`: repository images and branding assets.
 
 Integration tests live in crate-local `tests/` directories, for example `crates/nahpu_archive/tests/`.
